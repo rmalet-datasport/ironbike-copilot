@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const filters: FilterCondition[] = body.filters ?? [];
     const scopeFilterGroups: FilterCondition[][] | undefined = body.scopeFilterGroups ?? undefined;
 
-    const pool = filterParticipants(filters, scopeFilterGroups);
+    const pool = await filterParticipants(filters, scopeFilterGroups);
     const stats = computeStats(pool);
 
     return Response.json({ stats });

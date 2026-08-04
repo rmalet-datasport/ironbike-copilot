@@ -31,11 +31,11 @@ function matchesAllFilters(p: Participant, filters: FilterCondition[]): boolean 
 // scopeFilterGroups : union (OR) de groupes de filtres (ex: les segments prédéfinis
 // sélectionnés comme scope) — chaque groupe est évalué en AND, les groupes entre eux en OR.
 // filters : appliqués en AND par-dessus le scope. Absence de scope = tous les participants.
-export function filterParticipants(
+export async function filterParticipants(
   filters: FilterCondition[],
   scopeFilterGroups?: FilterCondition[][]
-): Participant[] {
-  let pool: Participant[] = getParticipants()
+): Promise<Participant[]> {
+  let pool: Participant[] = await getParticipants()
 
   if (scopeFilterGroups && scopeFilterGroups.length > 0) {
     pool = pool.filter(p => scopeFilterGroups.some(group => matchesAllFilters(p, group)))

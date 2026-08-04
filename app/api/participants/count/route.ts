@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const filters: FilterCondition[] = body.filters ?? [];
     const scopeFilterGroups: FilterCondition[][] | undefined = body.scopeFilterGroups ?? undefined;
 
-    const count = filterParticipants(filters, scopeFilterGroups).length;
+    const count = (await filterParticipants(filters, scopeFilterGroups)).length;
 
     return Response.json({ count });
   } catch (err) {

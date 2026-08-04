@@ -7,9 +7,14 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import ExcelJS from 'exceljs';
 import type { Participant, GeoZone } from '@/lib/types/participant';
 
 const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
+
+// Nom de fichier attendu pour la liste des inscrits 2026 — chaque collègue place sa copie
+// (même nom exact) dans son data/ local. Voir IRONBIKE_BRIEF.md §4.1bis.
+const REGISTERED_PATH = path.join(process.cwd(), 'data', 'Angemeldete Teilnehmende Iron Bike.xlsx');
 
 // Bucket approximatif par préfixe NPA — voir IRONBIKE_BRIEF.md §2.2. Ce n'est pas une distance
 // calculée : ne pas s'appuyer sur ce bucket comme fiable au NPA près (P1 : géocodage précis).
@@ -83,16 +88,30 @@ function hashId(parts: string[]): string {
   return `P-${digest.slice(0, 12)}`;
 }
 
-let cached: Participant[] | null = null;
+let cachedPromise: Promise<Participant[]> | null = null;
 
-export function getParticipants(): Participant[] {
-  if (cached) return cached;
+// Charge participants.csv, puis fusionne avec la liste des inscrits 2026 si le fichier
+// REGISTERED_PATH existe localement (voir mergeRegistrationStatus). Mis en cache une seule
+// fois par process — redémarrer le serveur de dev après avoir mis à jour l'un des deux fichiers.
+export function getParticipants(): Promise<Participant[]> {
+  if (!cachedPromise) {
+    cachedPromise = loadParticipants();
+  }
+  return cachedPromise;
+}
 
+async function loadParticipants(): Promise<Participant[]> {
+  const base = parseParticipantsCsv();
+  if (!fs.existsSync(REGISTERED_PATH)) return base;
+  const registeredList = await loadRegisteredList(REGISTERED_PATH);
+  return mergeRegistrationStatus(base, registeredList);
+}
+
+function parseParticipantsCsv(): Participant[] {
   const raw = fs.readFileSync(DATA_PATH, 'utf-8');
   const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length === 0) {
-    cached = [];
-    return cached;
+    return [];
   }
 
   const delimiter = detectDelimiter(lines[0]);
@@ -159,7 +178,6 @@ export function getParticipants(): Participant[] {
     });
   }
 
-  cached = participants;
   return participants;
 }
 
@@ -167,33 +185,84 @@ export interface RegisteredEntry {
   email?: string;
   firstName?: string;
   lastName?: string;
-  birthDate?: string; // ISO yyyy-mm-dd
+  birthDate?: string; // ISO yyyy-mm-dd — absent dans l'export actuel (colonnes Vorname/Nachname/E-Mail uniquement)
+}
+
+const REGISTERED_COLUMN_ALIASES: Record<keyof RegisteredEntry, string[]> = {
+  firstName: ['vorname', 'firstname', 'prénom', 'prenom'],
+  lastName: ['nachname', 'lastname', 'nom'],
+  email: ['e-mail', 'email', 'mail'],
+  birthDate: ['geburtsdatum', 'birthdate', 'date de naissance'],
+};
+
+async function loadRegisteredList(filePath: string): Promise<RegisteredEntry[]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(filePath);
+  const sheet = wb.worksheets[0];
+  if (!sheet) return [];
+
+  const headerRow = sheet.getRow(1);
+  const colIndex: Partial<Record<keyof RegisteredEntry, number>> = {};
+  headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    const raw = String(cell.value ?? '').trim().toLowerCase();
+    for (const [field, aliases] of Object.entries(REGISTERED_COLUMN_ALIASES) as [keyof RegisteredEntry, string[]][]) {
+      if (aliases.includes(raw)) colIndex[field] = colNumber;
+    }
+  });
+
+  const entries: RegisteredEntry[] = [];
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const get = (field: keyof RegisteredEntry) => {
+      const c = colIndex[field];
+      if (!c) return undefined;
+      const v = row.getCell(c).value;
+      return v == null ? undefined : String(v).trim() || undefined;
+    };
+    const entry: RegisteredEntry = {
+      firstName: get('firstName'),
+      lastName: get('lastName'),
+      email: get('email')?.toLowerCase(),
+      birthDate: get('birthDate'),
+    };
+    if (entry.firstName || entry.lastName || entry.email) entries.push(entry);
+  }
+  return entries;
 }
 
 // Matche par email en priorité (le champ le plus fiable des deux côtés), repli sur
-// nom + date de naissance. Ne sera jamais 100% (noms mal orthographiés, emails changés) —
-// voir IRONBIKE_BRIEF.md §4.1bis. Une fois une liste chargée, tout participant non matché
-// devient 'not_registered' (le dataset historique complet sert de référentiel négatif).
+// nom + date de naissance, puis repli sur nom seul si aucune date de naissance n'est
+// disponible côté inscrits (cas de l'export actuel — colonnes Vorname/Nachname/E-Mail
+// uniquement). Le repli nom seul est la fusion la moins fiable (collisions possibles sur des
+// noms courants) — voir IRONBIKE_BRIEF.md §4.1bis : le taux de match ne sera jamais 100%.
+// Une fois une liste chargée, tout participant non matché devient 'not_registered' (le
+// dataset historique complet sert de référentiel négatif).
 export function mergeRegistrationStatus(
   participants: Participant[],
   registeredList: RegisteredEntry[]
 ): Participant[] {
   const byEmail = new Set<string>();
   const byNameDob = new Set<string>();
+  const byNameOnly = new Set<string>();
 
   for (const entry of registeredList) {
     if (entry.email) byEmail.add(entry.email.trim().toLowerCase());
-    if (entry.firstName && entry.lastName && entry.birthDate) {
-      byNameDob.add(`${entry.firstName.trim().toLowerCase()}|${entry.lastName.trim().toLowerCase()}|${entry.birthDate}`);
+    if (entry.firstName && entry.lastName) {
+      const nameKey = `${entry.firstName.trim().toLowerCase()}|${entry.lastName.trim().toLowerCase()}`;
+      if (entry.birthDate) byNameDob.add(`${nameKey}|${entry.birthDate}`);
+      else byNameOnly.add(nameKey);
     }
   }
 
   return participants.map(p => {
+    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
     const matchedByEmail = !!p.email && byEmail.has(p.email);
-    const matchedByNameDob = byNameDob.has(`${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}|${p.birthDate ?? ''}`);
+    const matchedByNameDob = byNameDob.has(`${nameKey}|${p.birthDate ?? ''}`);
+    const matchedByNameOnly = byNameOnly.has(nameKey);
+    const matched = matchedByEmail || matchedByNameDob || matchedByNameOnly;
     return {
       ...p,
-      registrationStatus2026: (matchedByEmail || matchedByNameDob ? 'registered' : 'not_registered') as Participant['registrationStatus2026'],
+      registrationStatus2026: (matched ? 'registered' : 'not_registered') as Participant['registrationStatus2026'],
     };
   });
 }

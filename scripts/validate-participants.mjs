@@ -4,8 +4,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import ExcelJS from 'exceljs';
 
 const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
+const REGISTERED_PATH = path.join(process.cwd(), 'data', 'Angemeldete Teilnehmende Iron Bike.xlsx');
 
 const KERNRADIUS_PREFIXES = new Set(['64', '88', '87', '86', '63', '80', '81']);
 const INNERSCHWEIZ_PREFIXES = new Set(['60']);
@@ -97,6 +99,7 @@ const emailsSeen = new Map(); // email -> count of raw occurrences (pre-dedup)
 let dedupExcluded = 0;
 const seenDedupKeys = new Set();
 const geoZoneCount = {};
+const participants = []; // minimal in-memory {firstName,lastName,email,birthDate} — never printed
 
 for (let i = 1; i < lines.length; i++) {
   const fields = parseCsvLine(lines[i], delimiter);
@@ -134,6 +137,8 @@ for (let i = 1; i < lines.length; i++) {
 
   const zone = deriveGeoZone(nationality, zip);
   geoZoneCount[zone] = (geoZoneCount[zone] ?? 0) + 1;
+
+  participants.push({ firstName, lastName, email: emailRaw || undefined, birthDate });
 }
 
 ages.sort((a, b) => a - b);
@@ -153,3 +158,64 @@ console.log('Emails uniques:', uniqueEmails, '— emails dupliqués (>1 occurren
 console.log('Lignes exclues par dédup (email+nom+naissance):', dedupExcluded);
 console.log('GeoZone distribution:', geoZoneCount);
 console.log('--- Comparer avec le tableau §1.3 de IRONBIKE_BRIEF.md ---');
+
+// --- Taux de match avec la liste des inscrits 2026 (agrégats uniquement) ---
+if (fs.existsSync(REGISTERED_PATH)) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(REGISTERED_PATH);
+  const sheet = wb.worksheets[0];
+
+  const ALIASES = {
+    firstName: ['vorname', 'firstname', 'prénom', 'prenom'],
+    lastName: ['nachname', 'lastname', 'nom'],
+    email: ['e-mail', 'email', 'mail'],
+    birthDate: ['geburtsdatum', 'birthdate', 'date de naissance'],
+  };
+  const colIndex = {};
+  sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    const raw = String(cell.value ?? '').trim().toLowerCase();
+    for (const [field, aliases] of Object.entries(ALIASES)) {
+      if (aliases.includes(raw)) colIndex[field] = colNumber;
+    }
+  });
+
+  const byEmail = new Set(), byNameDob = new Set(), byNameOnly = new Set();
+  let registeredRows = 0, registeredWithEmail = 0, registeredWithBirthDate = 0;
+
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r);
+    const get = f => { const c = colIndex[f]; if (!c) return undefined; const v = row.getCell(c).value; return v == null ? undefined : String(v).trim() || undefined; };
+    const firstName = get('firstName'), lastName = get('lastName');
+    const email = get('email')?.toLowerCase();
+    const birthDate = get('birthDate');
+    if (!firstName && !lastName && !email) continue;
+    registeredRows++;
+    if (email) { registeredWithEmail++; byEmail.add(email); }
+    if (firstName && lastName) {
+      const nameKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
+      if (birthDate) { registeredWithBirthDate++; byNameDob.add(`${nameKey}|${birthDate}`); }
+      else byNameOnly.add(nameKey);
+    }
+  }
+
+  let matchedByEmail = 0, matchedByNameDob = 0, matchedByNameOnly = 0, unmatched = 0;
+  for (const p of participants) {
+    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
+    if (p.email && byEmail.has(p.email)) matchedByEmail++;
+    else if (byNameDob.has(`${nameKey}|${p.birthDate ?? ''}`)) matchedByNameDob++;
+    else if (byNameOnly.has(nameKey)) matchedByNameOnly++;
+    else unmatched++;
+  }
+  const totalMatched = matchedByEmail + matchedByNameDob + matchedByNameOnly;
+
+  console.log('\n--- Taux de match avec la liste des inscrits 2026 (agrégats uniquement) ---');
+  console.log('Fichier:', path.basename(REGISTERED_PATH));
+  console.log('Lignes inscrits:', registeredRows, `(avec email: ${registeredWithEmail}, avec date de naissance: ${registeredWithBirthDate})`);
+  console.log('Participants historiques matchés "registered":', totalMatched, `sur ${participants.length} (${(totalMatched / participants.length * 100).toFixed(2)}%)`);
+  console.log('  dont par email:', matchedByEmail);
+  console.log('  dont par nom + date de naissance:', matchedByNameDob);
+  console.log('  dont par nom seul (moins fiable):', matchedByNameOnly);
+  console.log('Rappel : le nombre d\'inscrits (' + registeredRows + ') peut être > au nombre matché — les nouveaux inscrits qui n\'ont jamais couru l\'Iron Bike ne sont pas dans participants.csv (attendu, voir IRONBIKE_BRIEF.md).');
+} else {
+  console.log('\n(Aucun fichier d\'inscrits 2026 trouvé à', REGISTERED_PATH, '— skip du calcul de taux de match)');
+}
