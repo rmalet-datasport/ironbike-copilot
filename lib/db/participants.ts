@@ -263,69 +263,78 @@ async function loadRegisteredList(filePath: string): Promise<RegisteredEntry[]> 
   return entries;
 }
 
-// Matche par email en priorité (le champ le plus fiable des deux côtés), repli sur
-// nom + date de naissance, puis repli sur nom seul si aucune date de naissance n'est
-// disponible côté inscrits (cas de l'export actuel — colonnes Vorname/Nachname/E-Mail
-// uniquement). Le repli nom seul est la fusion la moins fiable (collisions possibles sur des
-// noms courants) — voir IRONBIKE_BRIEF.md §4.1bis : le taux de match ne sera jamais 100%.
+// Champs communs nécessaires au matching, côté Participant comme côté RegisteredEntry.
+interface Matchable {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  birthDate?: string;
+}
+
+function nameKeyOf(item: Matchable): string | undefined {
+  if (!item.firstName || !item.lastName) return undefined;
+  return `${item.firstName.trim().toLowerCase()}|${item.lastName.trim().toLowerCase()}`;
+}
+
+interface MatchIndex {
+  byEmailAndName: Set<string>; // email+nom ensemble — signal fort, résiste aux emails partagés en famille
+  byNameDob: Set<string>;      // nom+naissance ensemble — signal fort, indépendant de l'email
+  byEmailOnly: Set<string>;    // repli : uniquement pour les entrées SANS nom exploitable
+  byNameOnly: Set<string>;     // repli : uniquement pour les entrées SANS email ET SANS naissance
+}
+
+// Un item n'alimente les paliers "seul" (byEmailOnly/byNameOnly) que quand l'autre champ lui
+// manque réellement — pas simplement quand il ne correspond pas. C'est ce qui évite le
+// sur-matching sur un email partagé en famille : Alice et Bob partagent l'email de leurs
+// parents, mais seul celui dont le NOM correspond aussi est retenu par byEmailAndName.
+function buildMatchIndex(items: Matchable[]): MatchIndex {
+  const index: MatchIndex = { byEmailAndName: new Set(), byNameDob: new Set(), byEmailOnly: new Set(), byNameOnly: new Set() };
+  for (const item of items) {
+    const email = item.email?.trim().toLowerCase();
+    const nameKey = nameKeyOf(item);
+    if (nameKey && item.birthDate) index.byNameDob.add(`${nameKey}|${item.birthDate}`);
+    if (nameKey && email) index.byEmailAndName.add(`${email}|${nameKey}`);
+    if (email && !nameKey) index.byEmailOnly.add(email);
+    if (nameKey && !email && !item.birthDate) index.byNameOnly.add(nameKey);
+  }
+  return index;
+}
+
+function findMatch(item: Matchable, index: MatchIndex): boolean {
+  const email = item.email?.trim().toLowerCase();
+  const nameKey = nameKeyOf(item);
+  const matchedByNameDob = !!nameKey && !!item.birthDate && index.byNameDob.has(`${nameKey}|${item.birthDate}`);
+  const matchedByEmailAndName = !!nameKey && !!email && index.byEmailAndName.has(`${email}|${nameKey}`);
+  const matchedByEmailOnly = !!email && index.byEmailOnly.has(email);
+  const matchedByNameOnly = !!nameKey && index.byNameOnly.has(nameKey);
+  return matchedByNameDob || matchedByEmailAndName || matchedByEmailOnly || matchedByNameOnly;
+}
+
+// Confirme nom ET email ensemble en priorité (repli nom+naissance, indépendant), et ne retombe
+// sur un seul champ que si l'autre est réellement absent côté inscrits — pas juste différent.
+// Voir IRONBIKE_BRIEF.md §4.1bis : le taux de match ne sera jamais 100%, mais ce croisement
+// élimine le faux-positif le plus probable (email partagé en famille, nom différent).
 // Une fois une liste chargée, tout participant non matché devient 'not_registered' (le
 // dataset historique complet sert de référentiel négatif).
 export function mergeRegistrationStatus(
   participants: Participant[],
   registeredList: RegisteredEntry[]
 ): Participant[] {
-  const byEmail = new Set<string>();
-  const byNameDob = new Set<string>();
-  const byNameOnly = new Set<string>();
-
-  for (const entry of registeredList) {
-    if (entry.email) byEmail.add(entry.email.trim().toLowerCase());
-    if (entry.firstName && entry.lastName) {
-      const nameKey = `${entry.firstName.trim().toLowerCase()}|${entry.lastName.trim().toLowerCase()}`;
-      if (entry.birthDate) byNameDob.add(`${nameKey}|${entry.birthDate}`);
-      else byNameOnly.add(nameKey);
-    }
-  }
-
-  return participants.map(p => {
-    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
-    const matchedByEmail = !!p.email && byEmail.has(p.email);
-    const matchedByNameDob = byNameDob.has(`${nameKey}|${p.birthDate ?? ''}`);
-    const matchedByNameOnly = byNameOnly.has(nameKey);
-    const matched = matchedByEmail || matchedByNameDob || matchedByNameOnly;
-    return {
-      ...p,
-      registrationStatus2026: (matched ? 'registered' : 'not_registered') as Participant['registrationStatus2026'],
-    };
-  });
+  const index = buildMatchIndex(registeredList);
+  return participants.map(p => ({
+    ...p,
+    registrationStatus2026: (findMatch(p, index) ? 'registered' : 'not_registered') as Participant['registrationStatus2026'],
+  }));
 }
 
-// Inverse de mergeRegistrationStatus : inscrits 2026 qui ne matchent AUCUNE ligne de
-// participants.csv (email / nom+naissance / nom seul) — donc jamais couru l'Iron Bike avant.
-// Mêmes trois paliers de confiance, dans l'autre sens.
+// Inverse de mergeRegistrationStatus, même index de confiance : inscrits 2026 qui ne matchent
+// aucune ligne de participants.csv — donc jamais couru l'Iron Bike avant.
 function findPrimoInscrits(participants: Participant[], registeredList: RegisteredEntry[]): PrimoInscritStats {
-  const emailSet = new Set<string>();
-  const nameDobSet = new Set<string>();
-  const nameOnlySet = new Set<string>();
-
-  for (const p of participants) {
-    if (p.email) emailSet.add(p.email);
-    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
-    if (p.birthDate) nameDobSet.add(`${nameKey}|${p.birthDate}`);
-    nameOnlySet.add(nameKey);
-  }
-
+  const index = buildMatchIndex(participants);
   const stats: PrimoInscritStats = { count: 0, genderM: 0, genderF: 0, genderUnknown: 0 };
 
   for (const entry of registeredList) {
-    const nameKey = entry.firstName && entry.lastName
-      ? `${entry.firstName.toLowerCase()}|${entry.lastName.toLowerCase()}`
-      : undefined;
-    const matchedByEmail = !!entry.email && emailSet.has(entry.email);
-    const matchedByNameDob = !!nameKey && !!entry.birthDate && nameDobSet.has(`${nameKey}|${entry.birthDate}`);
-    const matchedByNameOnly = !!nameKey && nameOnlySet.has(nameKey);
-
-    if (!matchedByEmail && !matchedByNameDob && !matchedByNameOnly) {
+    if (!findMatch(entry, index)) {
       stats.count++;
       if (entry.gender === 'M') stats.genderM++;
       else if (entry.gender === 'F') stats.genderF++;

@@ -170,6 +170,7 @@ if (fs.existsSync(REGISTERED_PATH)) {
     lastName: ['nachname', 'lastname', 'nom'],
     email: ['e-mail', 'email', 'mail'],
     birthDate: ['geburtsdatum', 'birthdate', 'date de naissance'],
+    gender: ['geschlecht', 'gender', 'genre', 'sexe'],
   };
   const colIndex = {};
   sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
@@ -179,8 +180,8 @@ if (fs.existsSync(REGISTERED_PATH)) {
     }
   });
 
-  const byEmail = new Set(), byNameDob = new Set(), byNameOnly = new Set();
-  let registeredRows = 0, registeredWithEmail = 0, registeredWithBirthDate = 0;
+  const registeredList = [];
+  let registeredWithEmail = 0, registeredWithBirthDate = 0;
 
   for (let r = 2; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
@@ -188,34 +189,64 @@ if (fs.existsSync(REGISTERED_PATH)) {
     const firstName = get('firstName'), lastName = get('lastName');
     const email = get('email')?.toLowerCase();
     const birthDate = get('birthDate');
+    const gender = get('gender')?.toUpperCase();
     if (!firstName && !lastName && !email) continue;
-    registeredRows++;
-    if (email) { registeredWithEmail++; byEmail.add(email); }
-    if (firstName && lastName) {
-      const nameKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
-      if (birthDate) { registeredWithBirthDate++; byNameDob.add(`${nameKey}|${birthDate}`); }
-      else byNameOnly.add(nameKey);
-    }
+    if (email) registeredWithEmail++;
+    if (birthDate) registeredWithBirthDate++;
+    registeredList.push({ firstName, lastName, email, birthDate, gender });
   }
 
-  let matchedByEmail = 0, matchedByNameDob = 0, matchedByNameOnly = 0, unmatched = 0;
+  // Même index à 4 paliers que lib/db/participants.ts : nom+email ou nom+naissance en
+  // priorité (résiste aux emails partagés en famille), repli sur un seul champ SEULEMENT
+  // si l'autre est absent côté inscrits (pas juste différent).
+  function nameKeyOf(item) {
+    if (!item.firstName || !item.lastName) return undefined;
+    return `${item.firstName.toLowerCase()}|${item.lastName.toLowerCase()}`;
+  }
+  function buildMatchIndex(items) {
+    const index = { byEmailAndName: new Set(), byNameDob: new Set(), byEmailOnly: new Set(), byNameOnly: new Set() };
+    for (const item of items) {
+      const email = item.email?.toLowerCase();
+      const nameKey = nameKeyOf(item);
+      if (nameKey && item.birthDate) index.byNameDob.add(`${nameKey}|${item.birthDate}`);
+      if (nameKey && email) index.byEmailAndName.add(`${email}|${nameKey}`);
+      if (email && !nameKey) index.byEmailOnly.add(email);
+      if (nameKey && !email && !item.birthDate) index.byNameOnly.add(nameKey);
+    }
+    return index;
+  }
+  function findMatchTier(item, index) {
+    const email = item.email?.toLowerCase();
+    const nameKey = nameKeyOf(item);
+    if (nameKey && item.birthDate && index.byNameDob.has(`${nameKey}|${item.birthDate}`)) return 'nameDob';
+    if (nameKey && email && index.byEmailAndName.has(`${email}|${nameKey}`)) return 'emailAndName';
+    if (email && index.byEmailOnly.has(email)) return 'emailOnly';
+    if (nameKey && index.byNameOnly.has(nameKey)) return 'nameOnly';
+    return null;
+  }
+
+  const regIndex = buildMatchIndex(registeredList);
+  const tierCounts = { nameDob: 0, emailAndName: 0, emailOnly: 0, nameOnly: 0 };
+  let unmatched = 0;
   for (const p of participants) {
-    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
-    if (p.email && byEmail.has(p.email)) matchedByEmail++;
-    else if (byNameDob.has(`${nameKey}|${p.birthDate ?? ''}`)) matchedByNameDob++;
-    else if (byNameOnly.has(nameKey)) matchedByNameOnly++;
+    const tier = findMatchTier(p, regIndex);
+    if (tier) tierCounts[tier]++;
     else unmatched++;
   }
-  const totalMatched = matchedByEmail + matchedByNameDob + matchedByNameOnly;
+  const totalMatched = tierCounts.nameDob + tierCounts.emailAndName + tierCounts.emailOnly + tierCounts.nameOnly;
+
+  const partIndex = buildMatchIndex(participants);
+  const primoCount = registeredList.filter(entry => !findMatchTier(entry, partIndex)).length;
 
   console.log('\n--- Taux de match avec la liste des inscrits 2026 (agrégats uniquement) ---');
   console.log('Fichier:', path.basename(REGISTERED_PATH));
-  console.log('Lignes inscrits:', registeredRows, `(avec email: ${registeredWithEmail}, avec date de naissance: ${registeredWithBirthDate})`);
+  console.log('Lignes inscrits:', registeredList.length, `(avec email: ${registeredWithEmail}, avec date de naissance: ${registeredWithBirthDate})`);
   console.log('Participants historiques matchés "registered":', totalMatched, `sur ${participants.length} (${(totalMatched / participants.length * 100).toFixed(2)}%)`);
-  console.log('  dont par email:', matchedByEmail);
-  console.log('  dont par nom + date de naissance:', matchedByNameDob);
-  console.log('  dont par nom seul (moins fiable):', matchedByNameOnly);
-  console.log('Rappel : le nombre d\'inscrits (' + registeredRows + ') peut être > au nombre matché — les nouveaux inscrits qui n\'ont jamais couru l\'Iron Bike ne sont pas dans participants.csv (attendu, voir IRONBIKE_BRIEF.md).');
+  console.log('  dont par nom + naissance:', tierCounts.nameDob);
+  console.log('  dont par nom + email ensemble:', tierCounts.emailAndName);
+  console.log('  dont par email seul (nom absent côté inscrits):', tierCounts.emailOnly);
+  console.log('  dont par nom seul (email absent côté inscrits, le moins fiable):', tierCounts.nameOnly);
+  console.log('Primo-inscrits (inscrits sans aucune correspondance historique):', primoCount, `sur ${registeredList.length} lignes inscrits`);
 } else {
   console.log('\n(Aucun fichier d\'inscrits 2026 trouvé à', REGISTERED_PATH, '— skip du calcul de taux de match)');
 }
