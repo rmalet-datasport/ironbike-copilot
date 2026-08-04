@@ -51,18 +51,21 @@ côté client.
 `getParticipants()` fusionne automatiquement avec la liste des inscrits 2026 dès que
 `data/Angemeldete Teilnehmende Iron Bike.xlsx` existe localement (même nom exact attendu par
 chaque collègue) — pas d'étape manuelle, remplacer le fichier suffit à mettre à jour le statut
-au prochain redémarrage du serveur. `mergeRegistrationStatus(participants, registeredList)`
-matche par email en priorité, repli sur nom + date de naissance, puis repli sur nom seul si
-aucune date de naissance n'est disponible côté inscrits (cas de l'export réel actuel —
-colonnes Vorname/Nachname/E-Mail uniquement, pas de date de naissance : le repli nom+naissance
-n'est donc jamais utilisé pour l'instant). Une fois la liste chargée, tout participant non
+au prochain redémarrage du serveur. `mergeRegistrationStatus(participants, registeredList)` et
+`findPrimoInscrits(...)` (inverse — inscrits sans aucun match historique, voir plus bas)
+partagent le même index à 4 paliers, du plus fiable au moins fiable : nom + date de naissance,
+nom + email ensemble, email seul, nom seul. Les deux paliers "seul" ne s'activent que si
+l'autre champ est **réellement absent** côté inscrits — pas juste différent — précisément pour
+éviter qu'un email partagé en famille dans `participants.csv` fasse matcher plusieurs personnes
+différentes sur la seule base de cet email. Une fois la liste chargée, tout participant non
 matché devient `'not_registered'` ; sans fichier, tout le monde reste `'unknown'`.
 
-⚠️ Le matching par email seul peut sur-matcher quand un email est partagé en famille dans
-`participants.csv` (un email peut correspondre à plusieurs personnes différentes) — le taux de
-match n'est jamais garanti à 100%, voir `scripts/validate-participants.mjs` pour le calcul
-réel (agrégats uniquement) et `IRONBIKE_BRIEF.md` §4.1bis. Ne pas s'appuyer sur
-`registrationStatus2026` seul pour exclure une liste réelle sans repasser par l'export onreg.
+Sur le fichier réel actuel (colonnes Vorname/Nachname/Geschlecht/E-Mail, pas de date de
+naissance) : seul le palier nom+email s'active, ce qui a corrigé un sur-matching réel — voir
+`scripts/validate-participants.mjs` pour le calcul (agrégats uniquement) et
+`IRONBIKE_BRIEF.md` §4.1bis. Le taux de match n'est cependant jamais garanti à 100% (noms mal
+orthographiés, emails changés) — ne pas s'appuyer sur `registrationStatus2026` seul pour
+exclure une liste réelle sans repasser par l'export onreg.
 
 Le point d'entrée d'upload (écran de dépôt du fichier) reste **P1** — le fichier se dépose
 pour l'instant directement dans `data/`, comme `participants.csv`.
