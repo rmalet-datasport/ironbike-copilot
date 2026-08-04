@@ -2,9 +2,16 @@
 
 ## Contexte du projet
 
-Sparta Co-Pilot est un outil de marketing automation pour organisateurs
-d'événements sportifs. Ce POC est conçu pour une démo client avec
-l'organisateur du Copenhagen Marathon.
+Iron Bike Co-Pilot est un outil de marketing automation pour l'organisateur de l'Iron Bike
+Race Einsiedeln (BikeSide) — la **30ᵉ et dernière édition**, le 27 septembre 2026. Ce repo est
+un fork dédié du POC Sparta Co-Pilot (Copenhagen Marathon) : l'architecture générale est
+reprise, mais les données, le modèle, les segments et les prompts sont entièrement reconfigurés
+pour ce client et cet événement. Voir `IRONBIKE_BRIEF.md` pour le détail complet de l'adaptation
+et les décisions prises.
+
+**Contrairement à Sparta, la donnée est réelle** (18 607 personnes ayant déjà participé,
+export `data/participants.csv`, gitignoré) — pas une DB fictive générée pour la démo. Toutes
+les règles de confidentialité ci-dessous en découlent directement.
 
 Stack : Next.js 15 (App Router), TypeScript, Tailwind CSS, Anthropic API, SheetJS (xlsx).
 
@@ -13,7 +20,7 @@ Stack : Next.js 15 (App Router), TypeScript, Tailwind CSS, Anthropic API, SheetJ
 ## Structure du projet
 
 ```
-sparta-copilot/
+ironbike-copilot/
 ├── app/
 │   ├── layout.tsx
 │   ├── page.tsx                         (redirect vers /gate/registration)
@@ -22,35 +29,35 @@ sparta-copilot/
 │   ├── campaigns/
 │   │   └── page.tsx                     (campagnes sauvegardées)
 │   ├── gate/
-│   │   ├── creation/page.tsx            (Gate 0 — Event Creation)
-│   │   ├── registration/page.tsx        (Gate 1 — Pre-lottery)
-│   │   ├── lottery/page.tsx             (Gate 2 — Post-lottery)
-│   │   └── finish/page.tsx              (Gate 3 — Post-race)
-│   ├── api/
-│   │   └── ai/
-│   │       ├── route.ts                 (génération campagne, streaming)
-│   │       ├── parse-segment/route.ts   (NL → filtres structurés)
-│   │       ├── suggest-segment/route.ts (objectif métier → profil + filtres)
-│   │       └── analyze-gate/route.ts   (analyse pool athletes → sous-segments IA)
-│   └── globals.css                      (CSS vars Datasport)
+│   │   ├── creation/page.tsx            (Gate 0 — Ankündigung)
+│   │   ├── registration/page.tsx        (Gate 1 — Anmeldephase)
+│   │   ├── lottery/page.tsx             (Gate 2 — Race Week)
+│   │   └── finish/page.tsx              (Gate 3 — Renntag & danach)
+│   └── api/
+│       ├── ai/
+│       │   └── route.ts                 (génération campagne)
+│       └── participants/
+│           ├── count/route.ts           (compte réel filtré)
+│           └── stats/route.ts           (agrégats structurés filtrés)
 ├── lib/
 │   ├── db/
-│   │   ├── athletes.ts                  (500 athletes statiques)
-│   │   ├── segment-filter.ts            (filterAthletes + dérivation gate0Segment)
-│   │   └── segment-stats.ts             (calcul distributions / percentiles DB)
+│   │   ├── participants.ts              (SERVEUR UNIQUEMENT — parsing/nettoyage CSV réel)
+│   │   ├── segment-filter.ts            (SERVEUR UNIQUEMENT — filterParticipants)
+│   │   └── segment-stats.ts             (SERVEUR UNIQUEMENT — computeStats)
+│   ├── segments/
+│   │   └── predefined.ts                (métadonnées segments prédéfinis — safe client+serveur)
+│   ├── hooks/
+│   │   └── useParticipantCounts.ts      (client — fetch vers /api/participants/count)
 │   ├── types/
-│   │   ├── athlete.ts                   (type Athlete complet)
-│   │   ├── gates.ts                     (types par gate)
-│   │   ├── segments.ts                  (FilterField, FilterCondition, CustomSegment,
-│   │   │                                 FILTER_FIELD_LABELS, FILTER_VALUE_OPTIONS,
-│   │   │                                 CUSTOM_SEGMENT_COLORS, buildSegmentDescription)
+│   │   ├── participant.ts               (type Participant complet)
+│   │   ├── segments.ts                  (FilterField, FilterCondition, CustomSegment, ...)
 │   │   └── brandHistory.ts              (interface BrandExample)
 │   ├── context/
 │   │   ├── CampaignHistoryContext.tsx   (historique campagnes sauvegardées)
 │   │   └── BrandHistoryContext.tsx      (exemples historiques + parsing xlsx/csv)
 │   ├── ai/
-│   │   └── prompts.ts                   (system prompts + buildHistoricalExamplesBlock)
-│   └── constants.ts                     (EVENT, SEGMENT_SIZES, KPI, REREGISTRATION_RATES, RACES)
+│   │   └── prompts.ts                   (system prompts allemands + buildUserPrompt)
+│   └── constants.ts                     (EVENT, CATEGORIES, SIBLING_EVENTS, CHANNELS)
 ├── components/
 │   ├── layout/
 │   │   ├── Sidebar.tsx
@@ -59,14 +66,14 @@ sparta-copilot/
 │   │   ├── GateTimeline.tsx
 │   │   ├── SegmentCard.tsx
 │   │   ├── ChannelSelector.tsx
-│   │   ├── SegmentBuilder.tsx           (modal création segment personnalisé)
-│   │   └── AISubSegments.tsx            (widget découverte sous-segments par IA)
+│   │   ├── SegmentBuilder.tsx           (Nom → Scope → Filtres manuels → Objectif → Compteur)
+│   │   └── SegmentStatsDrawer.tsx       (fetch /api/participants/stats)
 │   └── campaign/
 │       ├── CampaignGenerator.tsx
 │       ├── AssetCard.tsx
 │       └── RegeneratePrompt.tsx
-└── public/
-    └── fonts/                           (Saans Regular, Saans Medium, Saans Mono)
+└── data/
+    └── participants.csv                 (gitignoré — jamais commité, jamais lu côté client)
 ```
 
 ---
@@ -84,7 +91,9 @@ Ne jamais utiliser d'autre police.
 
 ### Couleurs
 Utiliser exclusivement les CSS variables définies dans `globals.css`.
-Ne jamais écrire de valeurs hex directement dans les composants.
+Ne jamais écrire de valeurs hex directement dans les composants (les couleurs de segments
+personnalisés/prédéfinis, définies en hex dans `lib/segments/predefined.ts` et
+`CUSTOM_SEGMENT_COLORS`, sont l'exception documentée — même logique que Sparta).
 
 Variables principales :
 ```css
@@ -104,116 +113,95 @@ Jamais pour les couleurs, polices ou border-radius — utiliser les CSS vars.
 
 ---
 
-## Données — règles strictes
+## Données — règles strictes (⚠️ données réelles, pas une démo)
 
-### DB athletes
-- Fichier : `lib/db/athletes.ts`
-- 500 athletes statiques, générés selon `docs/DATA_MODEL.md`
-- Distribution nationalités : 38% DK, 14% SE, 12% DE, 10% UK, 8% NL, 7% NO, 5% FR, 6% autres
-- ~40 athletes avec `externalProspect: true`
-- Tous les champs du type `Athlete` doivent être renseignés pour chaque athlete
+### Fichier source
+`data/participants.csv` — export réel de 18 607 personnes (noms, emails, dates de naissance).
+**Gitignoré, jamais commité.** Chaque collègue place sa propre copie locale dans `data/`
+(distribution hors-git, voir `IRONBIKE_BRIEF.md` §7bis). Colonnes : `firstName, lastName,
+gender, birthDate, nationIOC, email, zip, town, Status` (`Status` toujours vide, ignorée).
 
-### Chiffres UI vs DB statique
-Les chiffres affichés dans l'interface (tailles de segments, totaux)
-proviennent de `lib/constants.ts`, PAS du comptage de la DB statique.
-La DB statique sert uniquement à filtrer et afficher les listes d'athletes.
-Le comptage réel (rawCount) est mis à l'échelle vers les chiffres UI via :
+### Le dataset ne quitte jamais le serveur
+- `lib/db/participants.ts` et `lib/db/segment-filter.ts` importent le CSV réel — **ne jamais
+  les importer depuis un composant `'use client'`**. Seules les routes serveur
+  (`app/api/participants/*`, `app/api/ai/route.ts`) les utilisent.
+- Le client n'accède aux données que via `POST /api/participants/count` (`{ count }`) et
+  `POST /api/participants/stats` (`{ stats: ParticipantStats }`) — jamais une liste de
+  participants individuels.
+- Vérification à refaire après toute modification de ce périmètre : `npm run build` doit
+  produire des pages `gate/*` de quelques kB (First Load JS) — une régression ferait gonfler
+  ce chiffre de plusieurs Mo si le dataset se retrouvait bundlé côté client.
 
+### Chiffres UI — toujours réels
+Contrairement à Sparta (`SEGMENT_SIZES` hardcodé dans `lib/constants.ts`), **aucun chiffre de
+segment n'est fabriqué**. Tous les compteurs viennent de `filterParticipants(...).length`,
+exposés côté client via `/api/participants/count`. Pas de mise à l'échelle (`DB_SIZE`/
+`scaledCount`) : le dataset réel est déjà à la bonne échelle.
+
+### Champs jamais fabriqués
+`registrationStatus2026` reste `'unknown'` par défaut pour tout le monde et doit être traité
+comme un vrai inconnu (jamais équivalent à `false`) dans l'UI et les prompts. Pas de score
+d'engagement simulé, pas de nombre d'éditions couru inventé — ces champs n'existent pas dans
+le modèle `Participant` (voir `lib/types/participant.ts`).
+
+### Filtrage (`lib/db/segment-filter.ts`)
 ```ts
-scaledCount = Math.round(rawCount / DB_SIZE * effectiveTotal)
+export function filterParticipants(
+  filters: FilterCondition[],
+  scopeFilterGroups?: FilterCondition[][]  // OR entre groupes, AND à l'intérieur d'un groupe
+): Participant[]
 ```
-
-### Filtrage athletes (`lib/db/segment-filter.ts`)
-La fonction `filterAthletes(filters, baseSegmentIds?, segmentField?, baseAthleteIds?)` :
-- Filtre le pool selon un scope de segments (`baseSegmentIds` + `segmentField`)
-- Ou directement selon un `Set<string>` d'IDs (`baseAthleteIds`) — prioritaire sur `baseSegmentIds`
-- Applique les filtres démographiques (`FilterCondition[]`)
-- Cas spécial : `segmentField === 'gate0Segment'` → segment dérivé dynamiquement
-  depuis les champs existants (pas stocké dans la DB)
-
-### Statistiques DB (`lib/db/segment-stats.ts`)
-Deux fonctions disponibles :
-- `formatStatsForPrompt()` — stats complètes de la DB (engagement p25/50/75/90, âges, éditions, nationalités, % retournants, distance). Injectée dans `/api/ai/suggest-segment` et `/api/ai/analyze-gate` (pool complet).
-- `formatStatsForSubPool(pool: Athlete[])` — même structure mais calculée sur un sous-pool arbitraire. Injectée dans `/api/ai/analyze-gate` quand `athleteIds` est fourni.
+Pas de champ dérivé façon `gate0Segment` (Sparta) : aucun segment n'a de champ DB dédié pour
+Iron Bike, tout se réduit à des `FilterCondition[]` — prédéfinis ou personnalisés.
 
 ---
 
-## Segments personnalisés — fonctionnement
+## Segments — fonctionnement
 
-Chaque gate permet à l'organisateur de créer des segments personnalisés
-via le composant `SegmentBuilder`. Ces segments existent uniquement en mémoire
-React (pas de persistance) et disparaissent au rechargement.
+Chaque gate qui en propose permet à l'organisateur de créer des segments personnalisés via
+`SegmentBuilder`. Ces segments existent uniquement en mémoire React (pas de persistance) et
+disparaissent au rechargement.
 
 ### Types (`lib/types/segments.ts`)
 
 ```ts
 type FilterField =
-  | 'gender' | 'age_min' | 'age_max' | 'nationality' | 'isReturningAthlete'
-  | 'total_editions_min' | 'total_editions_max' | 'engagement_min' | 'city_contains'
-  | 'distance' | 'hasInsurance'
+  | 'gender' | 'age_min' | 'age_max' | 'nationality' | 'geoZone' | 'hasEmail'
+  | 'registrationStatus2026'
 
 interface FilterCondition { id: string; field: FilterField; value: string }
 
 interface CustomSegment {
   id: string; name: string; color: string; colorBg: string
   filters: FilterCondition[]
-  baseSegmentIds: string[]    // scope — vide = tous les athletes
-  baseSegmentLabels: string[] // labels lisibles pour l'affichage
-  objective?: string          // contexte libre pour la génération IA
+  baseSegmentIds: string[]    // segments prédéfinis sélectionnés comme scope — vide = tous
+  baseSegmentLabels: string[]
+  objective?: string
 }
 ```
 
 ### SegmentBuilder (`components/gates/SegmentBuilder.tsx`)
-Modal avec 5 sections dans l'ordre :
-1. **Nom** — champ texte libre
-2. **Décrire en langage naturel** — NL → `/api/ai/parse-segment` → filtres auto-appliqués
-3. **Définir par objectif métier** — objectif → `/api/ai/suggest-segment` → portrait + filtres + insights
-4. **Scope** — pills des segments prédéfinis du gate (sélection multiple) + "Tous les athletes"
-5. **Filtres** — filtres démographiques manuels (11 champs : gender, age_min, age_max, nationality, isReturningAthlete, total_editions_min, total_editions_max, engagement_min, city_contains, distance, hasInsurance)
-6. **Objectif & contexte** — texte libre injecté dans le prompt de génération de campagne
-7. **Compteur** — nombre d'athletes correspondant aux critères (mis à l'échelle)
+Réduit par rapport à Sparta — pas de section IA (langage naturel / objectif métier), voir
+`IRONBIKE_BRIEF.md` §4.1ter :
+1. **Nom**
+2. **Scope** — pills des segments prédéfinis du gate (absent si le gate n'en a pas, ex. Gate 2)
+3. **Filtres** manuels (7 champs)
+4. **Objectif & contexte** — texte libre injecté dans le prompt de génération
+5. **Compteur** — vrai compte via `POST /api/participants/count` (debounce 250ms)
 
-Accepte `initialSegment?: CustomSegment` pour pré-remplir le formulaire (édition d'un segment existant).
-
-`GateSegmentDef` (interface exportée) :
-```ts
-interface GateSegmentDef {
-  id: string
-  label: string
-  color: string
-  filters?: FilterCondition[]   // présent pour les segments générés par IA (AISubSegments)
-}
-```
-Quand `filters` est présent dans un `GateSegmentDef` sélectionné en scope, le compteur calcule l'intersection via `filterAthletes` directement (pas via `athleteSegmentField`).
+### Segments prédéfinis (`lib/segments/predefined.ts`)
+Métadonnées pures (`id`, `label`, `icon`, `color`, `filters`, `channels`, `objective`, ...) —
+safe à importer côté client ET serveur puisqu'aucune donnée participant n'y figure. Utilisé
+par les pages gate pour l'affichage, et par `app/api/ai/route.ts` pour situer le contexte du
+segment dans le prompt. Voir `GATES.md` pour le détail par gate — Gate 0 et 3 n'ont qu'un
+segment agrégé (`toute_la_base`), Gate 1 en a 4 (géo/email), Gate 2 n'en a aucun (filtres
+manuels uniquement, décision produit).
 
 ### Affichage dans les gates
-- Header colonne gauche : `[LABEL] [total athletes in this gate] — [+ Créer un segment]`
-- Segments prédéfinis : `SegmentCard` en liste verticale
-- Segments custom : rows avec point coloré + nom + compteur + bouton delete, directement sous les prédéfinis
-- Sélection d'un segment custom : panel campagne à droite avec badge CUSTOM
-
-### AISubSegments (`components/gates/AISubSegments.tsx`)
-Widget affiché dans le panneau de droite quand un segment est sélectionné. Permet de découvrir des sous-groupes IA dans la population du segment courant.
-
-Props :
-```ts
-interface Props {
-  parentId: string              // '__full_pool__' ou id d'un segment prédéfini
-  parentLabel: string
-  parentAthleteIds: string[]    // IDs filtrés du pool courant
-  parentScaledSize: number      // taille UI du segment parent
-  parentFilters?: FilterCondition[]  // filtres du parent pour merge si AI sub-segment
-  onSelect: (seg: CustomSegment) => void
-}
-```
-
-Comportement :
-- État `idle` : bouton "Découvrir des sous-segments"
-- Au clic → appelle `/api/ai/analyze-gate` avec `athleteIds` + `parentLabel`
-- Affiche 3–4 sous-segments avec nom, description, compteur scalé
-- Sélectionner un sous-segment → crée un `CustomSegment` avec les filtres du sous-segment
-  (mergés avec `parentFilters` si fournis) et appelle `onSelect()`
-- Bouton "Relancer" pour re-analyser une fois les résultats affichés
+- Header colonne gauche : `[LABEL] [total participants réel] [+ Créer un segment]` (bouton
+  absent sur Gate 0)
+- Segments prédéfinis : `SegmentCard` en liste verticale (absent sur Gate 2)
+- Segments custom : rows sous les prédéfinis, compteur réel, boutons Edit/delete
 
 ---
 
@@ -223,73 +211,40 @@ Comportement :
 ```ts
 // app/api/ai/route.ts
 model: "claude-sonnet-4-6"
-max_tokens: 1024
+max_tokens: 3000
 stream: false
 // Paramètres du body :
-gate: string                   // 'gate0' | 'gate1' | 'gate2' | 'gate3'
-segment: string                // ex: 'ambassador', 'custom_segment'
-channels: Channel[]            // ['email', 'sms', 'push', 'instagram'] — validés (400 si inconnu)
-segmentDescription?: string    // injecté dans le user prompt pour les segments custom
-historicalExamples?: BrandExample[]  // exemples filtrés par BrandHistoryContext
-selectedRaces?: Race[]         // courses à promouvoir (sélecteur dans CampaignGenerator)
-channelToRegenerate?: string   // si présent : régénère ce channel seul (buildRegeneratePrompt)
-customInstructions?: string    // instructions libres pour la régénération
-_dryRun?: boolean              // court-circuite Anthropic, retourne un fixture — pour les tests
+gate: string                     // 'gate0' | 'gate1' | 'gate2' | 'gate3'
+segment: string                  // ex: 'reactivation_kernradius', 'custom_segment'
+channels: Channel[]              // ['feed_post', 'story', 'newsletter'] — validés (400 si inconnu)
+segmentDescription?: string      // injecté pour les segments custom
+segmentSize?: number             // vrai compte, calculé côté client
+historicalExamples?: BrandExample[]
+selectedCategories?: Category[]        // Gate 0-2 — distances Iron Bike
+selectedSiblingEvents?: SiblingEvent[] // Gate 3 uniquement — cross-sell
+channelToRegenerate?: string
+customInstructions?: string
+_dryRun?: boolean
 ```
-
-### Route parse-segment : NL → filtres
-```ts
-// app/api/ai/parse-segment/route.ts
-// Input : { text: string }
-// Output : { filters: FilterCondition[], interpretation: string }
-// Modèle : claude-sonnet-4-6, max_tokens: 512, pas de streaming
-```
-
-### Route suggest-segment : objectif → profil
-```ts
-// app/api/ai/suggest-segment/route.ts
-// Input : { objective: string, gateContext?: string }
-// Output : { portrait: string, filters: FilterCondition[], insights: string[], rationale: string }
-// Modèle : claude-sonnet-4-6, max_tokens: 800, pas de streaming
-// Stats DB injectées automatiquement via formatStatsForPrompt()
-```
-
-### Route analyze-gate : pool → sous-segments IA
-```ts
-// app/api/ai/analyze-gate/route.ts
-// Input : { athleteIds?: string[], parentLabel?: string }
-// Output : { segments: AIRawSegment[] }   (3–4 segments si athleteIds fourni, 4 sinon)
-// Modèle : claude-sonnet-4-6, max_tokens: 1200, pas de streaming
-// Si athleteIds fourni → formatStatsForSubPool() ; sinon → formatStatsForPrompt()
-// Chaque segment retourné : { id, name, description, suggestedChannels, channelRationale, filters, color, colorBg }
-```
-Utilisée par `AISubSegments.tsx` pour découvrir des sous-groupes actionnables dans un segment parent.
 
 ### System prompts
-Définis dans `lib/ai/prompts.ts`, importés depuis `docs/AI_PROMPTS.md`.
-Un system prompt par combinaison gate + segment.
-La clé `custom_segment` existe pour tous les gates — le contexte est injecté
-via `buildSegmentDescription(segment)` dans le user prompt.
-Ne jamais écrire les prompts directement dans les composants.
-
-### Helpers prompts (`lib/ai/prompts.ts`)
-- `buildUserPrompt(params)` — construit le user prompt ; accepte `historicalExamples?: BrandExample[]` et `selectedRaces?: Race[]` (0 = comportement neutre, 1 = message spécifique, 2+ = message ombrelle)
-- `buildRegeneratePrompt(channel, instructions, historicalExamples?, selectedRaces?)` — régénération channel seul, intègre aussi le contexte courses
-- `buildHistoricalExamplesBlock(examples)` — formate les exemples historiques en bloc texte injecté dans le prompt
+Définis dans `lib/ai/prompts.ts`, **en allemand (suisse-allemand)** — décision validée, voir
+`IRONBIKE_BRIEF.md` §5. Un system prompt par combinaison gate + segment. La clé
+`custom_segment` existe pour chaque gate — contexte injecté via `buildSegmentDescription()`.
+Ne jamais écrire les prompts directement dans les composants. Voir `AI_PROMPTS.md` pour le
+détail complet et le prompt de base.
 
 ### Format de réponse (génération campagne)
-Claude répond toujours en JSON structuré (voir `docs/AI_PROMPTS.md`).
-Parser la réponse côté client avec un try/catch.
-En cas d'erreur de parsing, afficher un message d'erreur propre sans crash.
+Claude répond en JSON structuré, un asset par channel demandé (`feed_post`, `story`,
+`newsletter` — voir `AI_PROMPTS.md` pour le contrat exact des champs par channel). Parser
+avec un try/catch côté client, fallback propre sans crash en cas de JSON malformé.
 
 ### Streaming
-Aucune route ne streame actuellement. Toutes les routes utilisent `await client.messages.create()`.
+Aucune route ne streame — `await client.messages.create()`.
 
 ### Tests sans tokens Anthropic
-Le flag `_dryRun: true` dans le body de `/api/ai` court-circuite l'appel Anthropic
-et retourne un fixture `{ assets: [...] }` dans le même format que la vraie réponse.
-La validation complète s'exécute quand même (gate inconnu → 400, channel invalide → 400).
-Voir `scripts/test-routes.mjs` groupe [9] et `docs/TESTING.md` pour les commandes.
+`_dryRun: true` court-circuite Anthropic et retourne un fixture par channel dans le même
+format que la vraie réponse. Voir `scripts/test-routes.mjs` et `docs/TESTING.md`.
 
 ### Pre-commit hook
 `scripts/pre-commit.mjs` tourne automatiquement avant chaque `git commit` :
@@ -297,125 +252,67 @@ Voir `scripts/test-routes.mjs` groupe [9] et `docs/TESTING.md` pour les commande
 2. Route health checks (`scripts/test-routes.mjs`) — seulement si `localhost:3000` répond
 
 Installé automatiquement via `prepare` à chaque `npm install`.
-Installer manuellement : `node scripts/setup-hooks.mjs`
 
 ---
 
-## Sélecteur de courses (cross-sell)
+## Sélecteurs de contenu (`CampaignGenerator`)
 
-`CampaignGenerator` expose un sélecteur "Promote events" avant le bouton Generate.
-
-### Courses disponibles (`lib/constants.ts` → `RACES`)
-| id | name | distance | type |
-|---|---|---|---|
-| `marathon_42k` | Copenhagen Marathon | 42K | main |
-| `half_marathon_21k` | Copenhagen Half Marathon | 21K | main |
-| `cph_city_run_10k` | CPH City Run | 10K | satellite |
-| `cph_city_run_5k` | CPH City Run | 5K | satellite |
-
-### Comportement
-- Rien coché par défaut — le client choisit ce qu'il veut promouvoir
-- Les courses sont groupées en deux catégories visuelles : Main events / Satellite events
-- Le prompt s'adapte selon la sélection :
-  - **0 courses cochées** : comportement actuel, pas de contexte course spécifique
-  - **1 course cochée** : prompt spécifique à cette course
-  - **2+ courses cochées** : prompt ombrelle, message générique couvrant toutes les courses sélectionnées
-- `selectedRaces` est passé à l'API dans les deux cas (génération + régénération channel seul)
-- Le hint "multi-event = message ombrelle" s'affiche quand 2+ courses sont sélectionnées
+Deux modes exclusifs, selon `promoMode` :
+- **`categories`** (Gate 0-2, par défaut) — sélection de `CATEGORIES` (distances Iron Bike :
+  lang/mittel/kurz/vintage/easy_ride/e_mtb/kids). 0 coché = neutre, 1 = spécifique, 2+ =
+  message ombrelle.
+- **`siblingEvents`** (Gate 3 uniquement) — cross-sell vers `SIBLING_EVENTS` (autres Bike
+  Marathon Classics). Rien coché par défaut (décision D du concept, optionnelle).
 
 ---
 
-## Édition inline des assets générés
+## Assets générés — un type par channel
 
-`AssetCard` supporte l'édition directe du texte après génération.
+`AssetCard` n'a **pas** de logique d'upload d'image, de QR code ou de preview réseau social
+(contrairement à Sparta) — le concept Iron Bike ne prévoit pas de génération d'images ni de
+formats email/SMS/push/Instagram/LinkedIn/Facebook. Trois types d'assets :
 
-### Comportement
-- Tous les champs texte (subject, title, body, caption, hashtags) sont des `<input>` / `<textarea>` éditables
-- Visuellement identiques à du texte statique — bordure subtile au hover/focus
-- Les `<textarea>` s'auto-redimensionnent à la saisie
-- L'état édité est local à `AssetCard` (`editedAsset` state)
-- Reset automatique si l'asset est régénéré (via `useEffect` sur les champs de contenu)
+| Channel | Champs |
+|---|---|
+| `feed_post` | `copy`, `cta`, `visualDirection` ('typo'\|'foto'\|'ki_illustration'), `meta` |
+| `story` | `editionNumber?`, `dataPoint`, `sentence`, `stickerLink?`, `meta` |
+| `newsletter` | `subject`, `preheader`, `body`, `personalizationFields?`, `meta` |
 
-### Preview Instagram Story temps réel
-- La Story preview (`InstagramStoryPreview`) reçoit `editedAsset.caption` et `editedAsset.hashtags`
-- Toute modification du texte se reflète immédiatement dans la preview
-
-### Save
-- `onSave(imageUrl?, editedAsset?)` transmet les champs édités à `CampaignGenerator`
-- `saveAsset` utilise `editedAsset ?? asset` pour persister le contenu édité
+`paid_ad` est **P1** (pas de type d'asset ni de prompt encore). Édition inline (input/textarea
+sans bordure visible, save via `onSave(editedAsset)`) conservée du pattern Sparta.
 
 ---
 
 ## Brand Voice — historique campagnes
 
-Feature permettant d'uploader des campagnes passées pour enrichir le contexte IA.
-
-### Page (`app/brand-voice/page.tsx`)
-- Explication de la feature en 3 étapes
-- Table du format attendu + bouton téléchargement template CSV
-- Zone drag & drop (`.xlsx`, `.xls`, `.csv`)
-- État "chargé" : bannière verte + breakdown par channel et par gate
-- Accessible depuis la sidebar (lien "Historique" avec badge compteur vert)
-
-### Context (`lib/context/BrandHistoryContext.tsx`)
-```ts
-interface BrandHistoryContextValue {
-  examples: BrandExample[]
-  fileName: string | null
-  uploadFile: (file: File) => Promise<void>   // parse xlsx ou csv
-  clearExamples: () => void
-  getRelevantExamples(context: { gate, segment, channel? }): BrandExample[]
-}
-```
-
-`getRelevantExamples` filtre par gate + segment (+ channel optionnel), exclut les exemples qui contredisent le contexte, trie par score de spécificité, retourne max 6 exemples.
-
-### Format du fichier Excel/CSV
-Colonnes reconnues (FR + EN, insensible à la casse) :
-
-| Colonne | Alias reconnus | Optionnel |
-|---|---|---|
-| `channel` | canal, ch | oui |
-| `gate` | phase, etape, step | oui |
-| `segment` | audience, cible, target | oui |
-| `subject` | objet, sujet | — |
-| `title` | titre | — |
-| `body` | texte, contenu, content, message | — |
-| `caption` | legende, cap | — |
-| `hashtags` | tags, hashtag | — |
-
-Normalisation gate : `registration`/`1`/`gate1` → `gate1`, `lottery`/`2` → `gate2`, etc.
-
-### Injection dans le prompt
-`buildHistoricalExamplesBlock(examples)` formate les exemples en bloc texte inséré dans `buildUserPrompt` et `buildRegeneratePrompt`. L'IA est instruite de s'inspirer du style sans copier mot pour mot.
-
-### Scoring et filtrage
-- Match channel : +2 pts
-- Match gate : +2 pts
-- Match segment : +2 pts
-- Contradiction sur un champ → exemple exclu
-- Max 6 exemples par génération
+Feature inchangée par rapport à Sparta (`app/brand-voice/page.tsx`,
+`lib/context/BrandHistoryContext.tsx`) — upload xlsx/csv d'exemples passés, filtrage par
+gate/segment/channel, injection dans le prompt via `buildHistoricalExamplesBlock`. En mémoire
+uniquement, disparaît au rechargement.
 
 ---
 
-## Comportements critiques pour la démo
+## Comportements critiques pour le lancement (5.8.2026)
 
-1. **Navigation entre gates instantanée** — pas de loading, données statiques
-2. **Génération < 8 secondes** — afficher un loader engageant pendant l'attente
-3. **Régénération d'un channel seul** — ne pas régénérer les autres assets
-4. **JSON malformé** — fallback propre, pas de crash
-5. **Chiffres UI toujours visibles** — affichés sur les cartes segment avant toute interaction
-6. **Segments custom en mémoire uniquement** — pas de persistance entre rechargements
-7. **Brand Voice en mémoire uniquement** — disparaît au rechargement, pas de persistance
+1. **Navigation entre gates instantanée** — le fetch des compteurs (`/api/participants/count`)
+   se fait en arrière-plan, sans bloquer l'affichage des cartes.
+2. **Génération < 8 secondes** — loader engageant pendant l'attente.
+3. **Régénération d'un channel seul** — ne régénère pas les autres assets.
+4. **JSON malformé** — fallback propre, pas de crash.
+5. **Jamais de données participant individuelles côté client** — voir section Données.
+6. **Segments custom + Brand Voice en mémoire uniquement** — pas de persistance.
+7. **Statut d'inscription 2026 inconnu** — bannière explicite sur Gate 1, jamais un silence.
 
 ---
 
 ## Ce que cet outil ne fait PAS
 
 - Pas de génération d'images via IA
-- Pas d'authentification
-- Pas de base de données réelle (tout est statique)
+- Pas de base de données réelle *gérée par l'outil* — le CSV réel est chargé, nettoyé et mis
+  en cache en mémoire serveur, jamais persisté ailleurs
 - Pas d'envoi réel de campagnes ("Approve & schedule" est un bouton UI sans action)
-- Pas de liste d'événements — un seul event, Copenhagen Marathon 2026
+- Pas de liste d'événements — un seul event, Iron Bike Race Einsiedeln 2026 (30ᵉ, dernière)
 - Pas de persistance des segments personnalisés (mémoire React uniquement)
 - Pas de persistance des exemples Brand Voice (mémoire React uniquement)
+- Pas d'écran d'upload pour la liste des inscrits 2026 ou les résultats de course (P1 — la
+  fonction de merge existe déjà, voir `lib/db/participants.ts`)

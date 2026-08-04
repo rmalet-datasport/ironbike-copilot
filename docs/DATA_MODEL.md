@@ -1,291 +1,175 @@
-# DATA_MODEL.md — Sparta Co-Pilot
+# DATA_MODEL.md — Iron Bike Co-Pilot
 
 ## Principe général
 
-Une seule base de données d'athletes, enrichie progressivement à chaque gate.
-Les types TypeScript sont distincts par gate pour refléter les champs disponibles
-à ce stade du lifecycle. Aucune donnée n'est supprimée entre les gates — elle s'accumule.
+Contrairement au POC Sparta, la donnée est **réelle** : un export `data/participants.csv`
+(gitignoré, jamais commité) de 18 607 personnes ayant déjà participé à l'Iron Bike Race
+Einsiedeln, toutes éditions confondues. Voir `IRONBIKE_BRIEF.md` pour le contexte complet.
 
 ```
-lib/db/athletes.ts         → 500 athletes statiques (source unique de vérité)
-lib/db/segment-filter.ts   → filtrage dynamique + dérivation gate0Segment
-lib/db/segment-stats.ts    → calcul percentiles / distributions pour l'IA
-lib/types/athlete.ts       → type Athlete complet
-lib/types/gates.ts         → types par gate (Gate1Athlete, Gate2Athlete, Gate3Athlete)
-lib/types/segments.ts      → types segments personnalisés + constantes UI
+data/participants.csv       → fichier brut, gitignoré, jamais lu côté client
+lib/db/participants.ts      → SERVEUR UNIQUEMENT : parsing/nettoyage, cache mémoire
+lib/db/segment-filter.ts    → SERVEUR UNIQUEMENT : filterParticipants()
+lib/db/segment-stats.ts     → SERVEUR UNIQUEMENT : computeStats() — agrégats structurés
+lib/types/participant.ts    → type Participant
+lib/types/segments.ts       → types segments personnalisés + constantes UI
+lib/segments/predefined.ts  → métadonnées des segments prédéfinis (safe client + serveur)
+app/api/participants/*      → seul point d'accès du client aux données réelles
 ```
+
+### Règle absolue : le dataset ne quitte jamais le serveur
+
+`lib/db/participants.ts` et `lib/db/segment-filter.ts` importent des données réelles
+(noms, emails, dates de naissance) et ne doivent **jamais** être importés depuis un composant
+`'use client'`. Le client n'accède aux données que via `app/api/participants/count` et
+`app/api/participants/stats`, qui ne renvoient que des agrégats (un compteur, ou un objet
+`ParticipantStats` structuré) — jamais la liste des participants.
+
+Vérification faite lors de cette migration : le build Next.js confirme que les pages gate
+pèsent ~4 kB (First Load JS), ce qui exclut que le dataset de 18 607 lignes soit bundlé
+côté client.
 
 ---
 
-## Paramètres généraux de l'événement (`lib/constants.ts`)
+## Chargement et nettoyage (`lib/db/participants.ts`)
 
-```ts
-export const EVENT = {
-  name: "Copenhagen Marathon",
-  edition: 2026,
-  date: "2026-05-17",
-  city: "Copenhagen",
-  country: "Denmark",
-  capacity: 15000,
-  ballotOpenDate: "2025-11-01",
-  ballotCloseDate: "2025-12-15",
-  lotteryDate: "2026-01-10",
-  waitlistDeadline: "2026-03-01",
-  distances: ["Marathon 42K", "Half Marathon 21K"],
-  historicalReturnRate: 0.65,
-  totalApplicants: 20000,
-}
+`getParticipants()` charge `data/participants.csv` une fois (cache mémoire), avec :
 
-export const SEGMENT_SIZES = {
-  gate0: { past_finishers: 5200, past_refused: 8400, international_targets: 12000, external_prospects: 1600 },
-  gate1: { ambassador: 3200, to_reactivate: 2800, opportunist: 7500, cold_prospect: 6500 },
-  gate2: { confirmed_engaged: 8200, confirmed_passive: 3800, waitlist_hot: 800, waitlist_cold: 1200, refused_reactivatable: 2400, refused_lost: 3600 },
-  gate3: { loyal_finisher: 6800, champion_ambassador: 1400, at_risk_returner: 2100, lost_dns: 1200, reconquest_dnf: 500 },
-}
+- **Délimiteur auto-détecté** (`,` ou `;`).
+- **Bruit exclu** : lignes où `firstName`/`lastName` ressemble à un placeholder
+  (répétition d'une seule lettre type "Aaa"/"Bbb", chaîne purement numérique, ou motif
+  `Refnr=12345`). Heuristique approximative documentée dans le code — pas de moyen de
+  cibler exactement les ~28 lignes mentionnées dans `IRONBIKE_BRIEF.md` §1.2 sans lire les
+  données personnelles.
+- **Dédup** : par clé combinée `email + prénom + nom + date de naissance` (pas email seul,
+  pour ne pas fusionner des membres d'une même famille partageant un email).
+- **Champs manquants jamais inventés** : `gender` vide → `'unknown'`, `birthDate`/`age`
+  absents → `undefined`, jamais estimés.
+- **`geoZone`** : bucket approximatif par préfixe NPA (voir `IRONBIKE_BRIEF.md` §2.2) — pas
+  une distance calculée. P1 : géocodage précis.
 
-export const REREGISTRATION_RATES = {
-  naturalReturnRate: 0.65,
-  aiTargetedReturnRate: 0.82,
-  incrementalAthletes: 1950,
-  incrementalRevenue: 97500,
-}
-```
+`mergeRegistrationStatus(participants, registeredList)` matche par email en priorité, repli
+sur nom + date de naissance. Une fois une liste chargée, tout participant non matché devient
+`'not_registered'` ; tant qu'aucune liste n'est chargée, tout le monde reste `'unknown'`.
+Le point d'entrée d'upload (écran) est **P1** — la fonction de merge existe dès maintenant.
 
 ---
 
-## Historique des éditions (par athlete)
+## Profil participant (`lib/types/participant.ts`)
 
 ```ts
-type PastEdition = {
-  year: number                            // 2021–2025
-  applied: boolean
-  status: 'registered' | 'waitlist' | 'refused' | 'not_applied'
-  raceStatus?: 'finisher' | 'dns' | 'dnf'
-  finishTime?: string                     // ex: "3:42:15"
-  upsellsPurchased?: string[]
-}
-```
+export type GeoZone = 'kernradius' | 'innerschweiz' | 'reste_suisse' | 'etranger' | 'unknown'
 
----
-
-## Engagement score
-
-Score composite 0–100, hardcodé par athlete dans la DB statique.
-
-```ts
-type EngagementData = {
-  score: number           // 0–100, score composite
-  emailOpenRate: number   // 0–1
-  appOpens: number        // ouvertures app sur 90 jours
-  smsClickRate: number    // 0–1
-  instagramFollow: boolean
-  websiteVisits: number   // visites page event sur 90 jours
-}
-```
-
-Distributions dans la DB (500 athletes) :
-- p25 ≈ 35, médiane ≈ 55, p75 ≈ 72, p90 ≈ 83
-
----
-
-## Profil athlete complet (`lib/types/athlete.ts`)
-
-```ts
-export type Athlete = {
-
-  // ─── IDENTITÉ ───────────────────────────────────────────────────────────
-  id: string                  // "ATH-0001"
+export type Participant = {
+  id: string                  // hash stable (pas de Refnr fiable dans la source)
   firstName: string
   lastName: string
-  email: string
-  phone: string
-  nationality: string         // 'DK' | 'SE' | 'DE' | 'UK' | 'NL' | 'NO' | 'FR' | ...
-  city: string
-  zipCode: string
-  age: number
-  gender: 'M' | 'F'
-  acquisitionSource: AcquisitionSource
+  gender: 'M' | 'F' | 'unknown'
+  birthDate?: string          // ISO, undefined si absent dans la source
+  age?: number                // dérivé, undefined si birthDate absent
+  nationality: string         // code IOC brut (SUI, GER, ...) ou 'unknown'
+  email?: string
+  hasEmail: boolean
+  zip?: string
+  town?: string
+  geoZone: GeoZone
 
-  // ─── HISTORIQUE ─────────────────────────────────────────────────────────
-  pastEditions: PastEdition[]
-  totalEditionsApplied: number
-  totalEditionsRaced: number
-  isReturningAthlete: boolean
+  hasParticipatedBefore: true // vrai pour 100% du dataset
 
-  // ─── ENGAGEMENT ─────────────────────────────────────────────────────────
-  engagement: EngagementData
-
-  // ─── GATE 1 — Registration opens ────────────────────────────────────────
-  registrationDate?: string
-  distance?: 'Marathon 42K' | 'Half Marathon 21K'
-  estimatedFinishTime?: string
-  externalProspect?: boolean
-  externalProspectSource?: string
-  candidacyScore?: number           // 0–100
-  anticipatedValue?: number         // €
-  selectionProbability?: number     // 0–1
-  preLotterySegment?: 'ambassador' | 'to_reactivate' | 'opportunist' | 'cold_prospect'
-
-  // ─── GATE 2 — Lottery result ─────────────────────────────────────────────
-  registrationStatus?: 'registered' | 'waitlist' | 'refused'
-  lotteryDate?: string
-  waitlistPosition?: number
-  upsellsPurchased?: UpsellItem[]
-  upsellRevenue?: number
-  paymentStatus?: 'paid' | 'pending' | 'failed'
-  postLotterySegment?: 'confirmed_engaged' | 'confirmed_passive' | 'waitlist_hot' | 'waitlist_cold' | 'refused_reactivatable' | 'refused_lost'
-
-  // ─── GATE 3 — Race finish ────────────────────────────────────────────────
-  raceStatus?: 'finisher' | 'dns' | 'dnf'
-  finishTime?: string
-  finishCategory?: string
-  finishRank?: number
-  personalBest?: boolean
-  reRegistrationProbability?: number  // 0–1
-  postRaceSegment?: 'loyal_finisher' | 'champion_ambassador' | 'at_risk_returner' | 'lost_dns' | 'reconquest_dnf'
+  registrationStatus2026: 'registered' | 'not_registered' | 'unknown'
+  raceResult2026?: 'finisher' | 'dnf' | 'dns'  // rempli seulement après import post-course (P1)
 }
 ```
 
-> **Note Gate 0** : il n'existe pas de champ `gate0Segment` dans le type Athlete.
-> Le segment est dérivé à la volée par `getGate0Segment(athlete)` dans `segment-filter.ts`.
+Champs Sparta explicitement abandonnés (aucune source réelle) : `engagement`,
+`totalEditionsApplied/Raced`, `isReturningAthlete`, `candidacyScore`, `anticipatedValue`,
+`selectionProbability`, `preLotterySegment`/`postLotterySegment`/`postRaceSegment`,
+`upsellsPurchased`, `personalBest`, `reRegistrationProbability`.
 
 ---
 
-## Filtrage athletes (`lib/db/segment-filter.ts`)
+## Filtrage (`lib/db/segment-filter.ts`)
 
 ```ts
-export function filterAthletes(
+export function filterParticipants(
   filters: FilterCondition[],
-  baseSegmentIds?: string[],
-  segmentField?: string,
-  baseAthleteIds?: Set<string>   // prioritaire sur baseSegmentIds si fourni
-): Athlete[]
+  scopeFilterGroups?: FilterCondition[][]   // OR entre groupes, AND à l'intérieur d'un groupe
+): Participant[]
 ```
 
-**Cas spécial Gate 0** : quand `segmentField === 'gate0Segment'`, le pool est filtré
-via `getGate0Segment()` plutôt que via un champ direct de l'athlete.
+`scopeFilterGroups` remplace le `baseSegmentIds` + `segmentField` de Sparta : chaque groupe
+est un segment prédéfini sélectionné comme scope dans le `SegmentBuilder`. Sans champ DB dédié
+(pas de `gate0Segment`/`postLotterySegment` — ces champs n'existent pas pour Iron Bike), tous
+les segments, prédéfinis ou personnalisés, se réduisent à des `FilterCondition[]`.
 
-```ts
-function getGate0Segment(a: Athlete): string {
-  if (a.externalProspect) return 'external_prospects'
-  if (['DE', 'UK', 'NL', 'NO'].includes(a.nationality)) return 'international_targets'
-  if (a.isReturningAthlete && a.totalEditionsRaced > 0) return 'past_finishers'
-  return 'past_refused'
-}
-```
-
-**Champs filtrables (11 champs)** :
+**Champs filtrables (7 champs, `lib/types/segments.ts`)** :
 
 | FilterField | Type | Description |
 |---|---|---|
-| `gender` | select | 'M' \| 'F' |
-| `age_min` | number | âge ≥ valeur |
-| `age_max` | number | âge ≤ valeur |
-| `nationality` | select | code pays 2 lettres |
-| `isReturningAthlete` | boolean | 'true' \| 'false' |
-| `total_editions_min` | number | totalEditionsRaced ≥ valeur |
-| `total_editions_max` | number | totalEditionsRaced ≤ valeur |
-| `engagement_min` | number | engagement.score ≥ valeur |
-| `city_contains` | text | city.includes(valeur) |
-| `distance` | select | 'Marathon 42K' \| 'Half Marathon 21K' |
-| `hasInsurance` | boolean | 'true' \| 'false' |
+| `gender` | select | 'M' \| 'F' \| 'unknown' |
+| `age_min` / `age_max` | number | âge ≥ / ≤ valeur |
+| `nationality` | select | code IOC (SUI, GER, AUT, ITA, FRA, unknown) |
+| `geoZone` | select | valeur unique ou liste séparée par virgule (OR), ex. `innerschweiz,reste_suisse` |
+| `hasEmail` | boolean | 'true' \| 'false' |
+| `registrationStatus2026` | select | 'registered' \| 'not_registered' \| 'unknown' |
+
+Pas de champs `total_editions_*`, `engagement_min`, `city_contains`, `distance`,
+`hasInsurance` : aucune donnée réelle ne les alimente (voir `IRONBIKE_BRIEF.md` §2.1/§4.1ter).
 
 ---
 
-## Statistiques DB (`lib/db/segment-stats.ts`)
-
-Utilisé par `/api/ai/suggest-segment` et `/api/ai/analyze-gate` pour calibrer les filtres.
+## Statistiques (`lib/db/segment-stats.ts`)
 
 ```ts
-// Stats de la DB complète (500 athletes)
-export function formatStatsForPrompt(): string
-
-// Stats d'un sous-pool arbitraire (utilisé par analyze-gate quand athleteIds est fourni)
-export function formatStatsForSubPool(pool: Athlete[]): string
-
-// Les deux retournent une string avec :
-// - Engagement : p25, médiane, p75, p90
-// - Âge : p25, médiane, p75
-// - Éditions courues : distribution 0 / 1 / 2-3 / 4+
-// - % athletes retournants
-// - % femmes / hommes
-// - Distribution nationalités (top pays)
-// - Distribution distances (Marathon 42K / Half Marathon 21K)
+export function computeStats(pool: Participant[]): ParticipantStats | null
 ```
 
+Retourne un objet structuré (pas une string de prompt — les routes IA de découverte par
+stats ont été supprimées, voir `AI_PROMPTS.md`) : `total`, `hasEmailPct`, répartition genre,
+tranches d'âge, `geoZones`, `nationalities`, `registrationStatus`. Utilisé exclusivement par
+`app/api/participants/stats/route.ts`, consommé par `SegmentStatsDrawer`.
+
 ---
 
-## Types segments personnalisés (`lib/types/segments.ts`)
+## Segments — types (`lib/types/segments.ts`)
 
 ```ts
-export type FilterField =
-  | 'gender' | 'age_min' | 'age_max' | 'nationality' | 'isReturningAthlete'
-  | 'total_editions_min' | 'total_editions_max' | 'engagement_min' | 'city_contains'
-
-export interface FilterCondition {
-  id: string
-  field: FilterField
-  value: string
-}
+export interface FilterCondition { id: string; field: FilterField; value: string }
 
 export interface CustomSegment {
-  id: string
-  name: string
-  color: string           // couleur principale (hex)
-  colorBg: string         // couleur de fond (hex clair)
+  id: string; name: string; color: string; colorBg: string
   filters: FilterCondition[]
-  baseSegmentIds: string[]    // vide = tous les athletes
-  baseSegmentLabels: string[] // labels lisibles pour l'affichage
-  objective?: string          // texte libre injecté dans le prompt IA
+  baseSegmentIds: string[]    // segments prédéfinis sélectionnés comme scope — vide = tous
+  baseSegmentLabels: string[]
+  objective?: string
 }
-
-// Palette de 5 couleurs pour les segments personnalisés
-export const CUSTOM_SEGMENT_COLORS = [
-  { color: '#7C3AED', colorBg: '#F5F3FF' },  // violet
-  { color: '#0891B2', colorBg: '#ECFEFF' },  // cyan
-  { color: '#DB2777', colorBg: '#FDF2F8' },  // rose
-  { color: '#059669', colorBg: '#ECFDF5' },  // vert
-  { color: '#D97706', colorBg: '#FFFBEB' },  // ambre
-]
-
-// Génère une description textuelle du segment pour le prompt IA
-export function buildSegmentDescription(segment: CustomSegment): string
-// Retourne : "Segment personnalisé : \"Nom\"\nScope : ...\nCritères : ...\nObjectif : ..."
 ```
 
----
+`buildSegmentDescription(segment)` inchangé dans son principe (Scope / Critères / Objectif),
+adapté aux nouveaux champs.
 
-## Distribution nationalités (DB statique — 500 athletes)
+## Segments prédéfinis (`lib/segments/predefined.ts`)
 
-| Nationalité | % | Nb athletes |
-|---|---|---|
-| DK | 38% | 190 |
-| SE | 14% | 70 |
-| DE | 12% | 60 |
-| UK | 10% | 50 |
-| NL | 8% | 40 |
-| NO | 7% | 35 |
-| FR | 5% | 25 |
-| Autres | 6% | 30 |
-
-Ces proportions se reflètent dans les chiffres UI via `SEGMENT_SIZES`.
+Métadonnées pures (pas de données participant) — importables aussi bien côté client (pages
+gate, `SegmentBuilder`) que côté serveur (`app/api/ai/route.ts`, pour calculer la taille réelle
+du segment envoyée au prompt). Voir `GATES.md` pour le détail par gate.
 
 ---
 
-## Sources d'acquisition
+## Comptage — plus de mise à l'échelle
+
+Contrairement à Sparta (`scaledCount = rawCount / DB_SIZE * effectiveTotal`), les nombres
+affichés sont **les vrais comptes**, calculés à la volée par `filterParticipants(...).length`
+côté serveur et exposés via `POST /api/participants/count`. Aucune constante `SEGMENT_SIZES`
+n'existe plus dans `lib/constants.ts`.
+
+---
+
+## `lib/constants.ts`
 
 ```ts
-type AcquisitionSource =
-  | 'organic_search'
-  | 'social_instagram'
-  | 'partner_event'
-  | 'contest'
-  | 'word_of_mouth'
-  | 'returning_athlete'
-  | 'external_prospect'   // ~40 athletes avec externalProspect: true
+export const EVENT = { name: 'Iron Bike Race Einsiedeln', edition: 30, isLastEdition: true, raceDate: '2026-09-27', ... }
+export const CATEGORIES: Category[]       // distances/courses Iron Bike (remplace RACES)
+export const SIBLING_EVENTS: SiblingEvent[]  // cross-sell Gate 3 uniquement
+export const CHANNELS = ['feed_post', 'story', 'newsletter'] as const  // P0 ; paid_ad = P1
 ```
-
-Prospects externes (~40 athletes) :
-- Nike Running Club Copenhagen Contest — ~15 athletes
-- Intersport Partner Program — ~13 athletes
-- Parkrun Denmark Partnership — ~12 athletes

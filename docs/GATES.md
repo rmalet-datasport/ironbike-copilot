@@ -1,282 +1,161 @@
-# GATES.md — Spec fonctionnelle des 4 gates
+# GATES.md — Spec fonctionnelle des 4 gates (Iron Bike Race Einsiedeln)
 
 ## Principe général
 
-Le lifecycle Copenhagen Marathon 2026 est découpé en 4 gates fixes.
-La navigation entre les gates se fait via la timeline en haut de page.
-Chaque gate affiche ses propres segments, channels recommandés et campagnes générées.
+Il n'y a pas de tirage au sort pour l'Iron Bike (inscription ouverte, premier arrivé). Les 4
+gates représentent des **phases temporelles de la campagne** (voir `IRONBIKE_BRIEF.md` §4),
+pas des étapes d'un tirage :
 
-**Segmentation hybride** : chaque gate dispose de segments prédéfinis statiques
-ET d'un bouton "Créer un segment" permettant de créer des segments personnalisés
-dynamiquement via filtres manuels ou IA.
+| Gate (route)                 | Nom affiché            | Période            |
+| ----------------------------- | ---------------------- | ------------------ |
+| `gate/creation` (Gate 0)     | **Ankündigung**         | Mi 5.8 – Ve 7.8    |
+| `gate/registration` (Gate 1) | **Anmeldephase**        | Ve 7.8 – Di 20.9   |
+| `gate/lottery` (Gate 2)      | **Race Week**           | Me 16.9 – Ve 25.9  |
+| `gate/finish` (Gate 3)       | **Renntag & danach**    | Sa 26.9 – Me 30.9+ |
+
+Les noms de route restent ceux de Sparta (P0 — cosmétique, P1 pour renommer les dossiers).
+
+**Chiffres réels, jamais fabriqués** : contrairement à Sparta (`SEGMENT_SIZES` hardcodé), tous
+les compteurs affichés viennent de `POST /api/participants/count` sur le dataset réel. Aucun
+KPI inventé (pas d'`avgCandidacyScore`, `upsellRevenue`, etc. — ces champs n'existent pas pour
+Iron Bike, voir `DATA_MODEL.md`).
 
 ---
 
-## Layout commun à toutes les gates
+## Layout commun
 
 ```
-[KPI strip — 4 métriques clés]
+[KPI strip — 4 chiffres réels/constants]
+[Bannière caveat registrationStatus2026 (gate 1)]
 
 Colonne gauche                                Colonne droite (flex 1)
 ─────────────────────────────                 ──────────────────────
-[LABEL] [total athletes] [+ Create a segment] [Panel campagne du segment sélectionné]
-[Segment Card 1]  (emoji + Edit + stats)      ou
-[Segment Card 2]                              [Empty state si aucun sélectionné]
-[...]
-[Discover AI sub-segments]
-[Segment custom 1] (si créé)
-[Sample athletes du segment sélectionné]
+[LABEL] [total participants] [+ Create...]    [Panel campagne du segment sélectionné]
+[Segment Card 1..N] (si le gate en a)         ou
+[Segments custom]                              [Empty state]
 ```
 
-**Largeur dynamique de la colonne gauche :**
-- Aucun segment sélectionné → colonne gauche `flex: 1 1 auto`, max 700px (pleine largeur)
-- Segment sélectionné → colonne gauche `flex: 0 0 380px` (rétrécit pour laisser place au panel campagne)
-
-**Segment Cards — anatomie :**
-- Emoji icon à gauche (spécifique à chaque segment)
-- Label + bouton Edit (en haut à droite) + compteur
-- Description
-- Lien "View statistics →" (rouge) → ouvre le drawer de statistiques
-- Tags channels recommandés
-
-**Drawer statistiques (SegmentStatsDrawer) :**
-- Panneau fixe 540px qui glisse depuis la droite avec scrim overlay
-- Header : nom du segment, critères sous forme de pills
-- KPI grid : total athletes, re-apply likelihood, avg editions, returning share
-- Charts : nationalités (barres), distance (donut), returning (donut), éditions (barres), âge + genre
-- Section readiness + bouton "Generate Campaign"
-- Bouton Edit ouvre le SegmentBuilder pré-rempli avec le segment prédéfini en scope
+**Segmentation hybride, mais réduite** : avec seulement 6-7 champs réellement filtrables
+(voir `DATA_MODEL.md`), les mécanismes IA de découverte (NL → filtres, objectif → segment,
+sous-segments) ont été supprimés — voir `AI_PROMPTS.md`. `SegmentBuilder` se limite à
+Nom → Scope (si le gate a des segments prédéfinis) → Filtres manuels → Objectif → Compteur.
 
 ---
 
-## Gate 0 — Event Creation
+## Gate 0 — Ankündigung
 
 ### Quand
-Avant l'ouverture du ballot. L'organisateur crée l'édition 2026 et prépare
-ses premières communications pour générer des candidatures.
+Mi 5.8 – Ve 7.8. Post 1 (annonce), Newsletter 1 (à tous), communiqué de presse, Post 2
+(appel à photos).
 
-### Objectif marketing
-Maximiser le volume et la qualité des candidatures avant la fermeture du ballot.
+### Segments
+Un seul segment agrégé, pas de segmentation fine (Newsletter 1 et Post 1 s'adressent à toute
+la base) :
 
-### Segments prédéfinis (vue agrégée)
-
-| Segment | Emoji | Description | Taille UI | Dérivation depuis la DB |
-|---|---|---|---|---|
-| `past_finishers` | 🏅 | Finishers éditions précédentes non réinscrits | 5,200 | `isReturningAthlete && totalEditionsRaced > 0` |
-| `past_refused` | 🔄 | Refusés éditions précédentes | 8,400 | fallback (ni finisher, ni prospect, ni international) |
-| `international_targets` | 🌍 | Audiences DE, UK, NL, NO | 12,000 | `nationality in ['DE','UK','NL','NO']` |
-| `external_prospects` | 🤝 | Prospects partenaires importés | 1,600 | `externalProspect === true` |
-
-**Total gate 0** : 27,200 prospects (somme des 4 segments)
-
-> Note : Gate 0 n'a pas de champ `gate0Segment` dans la DB.
-> Le segment est dérivé dynamiquement dans `filterAthletes()` via `getGate0Segment(athlete)`.
-> Priorité de dérivation : external_prospects > international_targets > past_finishers > past_refused.
-
-### Contenu spécifique
-- Tableau **Historical Performance** (2021–2025) affiché sous la liste des segments
-- KPIs : capacité 2026, objectif candidatures, revenu moyen / édition, taux retour naturel
-
-### Channels recommandés
-- Email (campagne teaser + early bird)
-- Instagram (acquisition internationale)
-- Push notification (athletes avec app)
-
----
-
-## Gate 1 — Registration Opens (Pre-lottery)
-
-### Quand
-Ballot ouvert : 1 novembre 2025 → 15 décembre 2025.
-20,000 candidatures reçues. Le tirage n'a pas encore eu lieu.
-
-### Données disponibles
-Tous les champs Gate 1 du profil athlete (voir DATA_MODEL.md).
-Inclut : historique, engagement score, candidacyScore, anticipatedValue,
-selectionProbability, preLotterySegment, externalProspect.
-
-### Objectif marketing
-Maintenir l'engagement des candidats pendant l'attente du tirage.
-
-### Segments prédéfinis
-
-> Ces segments sont **basés sur des filtres** (pas sur un champ DB `preLotterySegment`).
-> Chaque segment est défini par une combinaison de `isReturningAthlete` + `distance`.
-> `filterAthletes()` reçoit les filtres directement — pas de `athleteSegmentField` pour gate 1.
-
-| Segment | Emoji | Taille UI | Filtres | Channels |
-|---|---|---|---|---|
-| `returning_marathon` 🏅 | 7,200 | `isReturningAthlete=true`, `distance=Marathon 42K` | email, push |
-| `returning_half` 🔄 | 4,800 | `isReturningAthlete=true`, `distance=Half Marathon 21K` | email, sms |
-| `new_marathon` 🏃 | 5,100 | `isReturningAthlete=false`, `distance=Marathon 42K` | email, instagram |
-| `new_half` ✨ | 2,900 | `isReturningAthlete=false`, `distance=Half Marathon 21K` | email |
-
-**Total gate 1** : 20,000 athletes
-
-### Channels recommandés par segment
-
-| Segment | Channels | Rationale |
+| Segment | Filtres | Channels recommandés |
 |---|---|---|
-| returning_marathon | email, push | Personnalisation sur les éditions passées ; push pour athletes actifs |
-| returning_half | email, sms | Communauté + urgence early bird |
-| new_marathon | email, instagram | Welcome + visuels inspirants pour nouveaux runners |
-| new_half | email | Simple, faible friction, CTA clair |
+| `toute_la_base` | aucun | newsletter, feed_post |
+
+Pas de bouton "+ Créer un segment" sur ce gate (informationnel uniquement, voir
+`IRONBIKE_BRIEF.md` §4.1). Le bouton "View statistics" reste disponible pour une répartition
+géo/âge informative.
 
 ---
 
-## Gate 2 — Lottery Result (Post-lottery)
+## Gate 1 — Anmeldephase
 
 ### Quand
-Tirage effectué le 10 janvier 2026.
-Résultats : registered / waitlist / refused.
-Deadline waitlist : 1er mars 2026.
-
-### Données disponibles
-Gate 1 + registrationStatus, waitlistPosition, upsellsPurchased, upsellRevenue,
-paymentStatus, postLotterySegment.
-
-### Objectif marketing
-- Registered : confirmer, engager, maximiser les upsells
-- Waitlist : retenir l'intérêt, préparer à l'attente
-- Refused : reconvertir vers d'autres événements Datasport
+Ve 7.8 – Di 20.9. Posts 3–12, Newsletter 2 (réactivation — **la plus importante**),
+Newsletter 3, Newsletter 4, countdown Stories (dès 29.8), vagues Meta.
 
 ### Segments prédéfinis
 
-Champ DB : `postLotterySegment`
+| Segment | Filtres | Channels |
+|---|---|---|
+| `reactivation_kernradius` | `hasEmail=true`, `geoZone=kernradius` | newsletter, story |
+| `reactivation_hors_kernradius` | `hasEmail=true`, `geoZone=innerschweiz,reste_suisse` | newsletter |
+| `reactivation_etranger` | `hasEmail=true`, `geoZone=etranger` | newsletter |
+| `non_joignable_email` | `hasEmail=false` | — (voir bannière caveat) |
 
-| Segment | Emoji | Taille UI | Description | Objectif |
-|---|---|---|---|---|
-| `confirmed_engaged` | 🎉 | 8,200 | Registered + engagement > 60 | Upsells, préparation course |
-| `confirmed_passive` | 😴 | 3,800 | Registered + engagement ≤ 60 | Réactiver avant la course |
-| `waitlist_hot` | 🔥 | 800 | Waitlist position ≤ 200 | Maintenir l'espoir |
-| `waitlist_cold` | ❄️ | 1,200 | Waitlist position > 200 | Message honnête, alternatives |
-| `refused_reactivatable` | 🔁 | 2,400 | Refused + returning athlete | Fidélisation long terme |
-| `refused_lost` | 👋 | 3,600 | Refused + première candidature | Message consolation léger |
+Bannière permanente sur ce gate : *"Statut d'inscription 2026 inconnu pour cette base — à
+exclure manuellement via l'export onreg avant tout envoi réel."* Le filtre
+`registrationStatus2026` existe dans `SegmentBuilder` dès maintenant (voir
+`IRONBIKE_BRIEF.md` §4.1bis) — tant qu'aucune liste d'inscrits n'est chargée, filtrer sur
+`registered` renvoie 0.
 
-**Total gate 2** : 20,000 athletes
-
-### Upsells disponibles (segment confirmed uniquement)
-
-| Upsell | Prix |
-|---|---|
-| Accommodation Package | ~€180 |
-| Charity Bib | €50+ |
-| VIP Finish Line | €75 |
-| Race Photo Pack | €35 |
-| Pace Group Access | €25 |
-| Finisher T-shirt Premium | €40 |
+Le segment "nouveaux prospects jamais inscrits" (ciblage géo + lookalike Meta) n'existe pas
+comme filtre : cette audience vit dans Meta Ads Manager, pas dans `participants.csv`.
 
 ---
 
-## Gate 3 — Race Finish (Post-race)
+## Gate 2 — Race Week
 
 ### Quand
-Après la course du 17 mai 2026.
-Données de résultats disponibles dans les 24h post-course.
+Me 16.9 – Ve 25.9. Posts 13–16, Newsletter 5 (logistique inscrits), countdown items 21–30
+(bascule sérieuse dès l'item 27), vague Meta retargeting.
 
-### Données disponibles
-Gate 2 + raceStatus, finishTime, finishCategory, finishRank, personalBest,
-reRegistrationProbability, postRaceSegment.
+### Segments
+**Aucun segment prédéfini** (décision produit — avec si peu de dimensions filtrables, une
+pré-segmentation fixe n'apportait rien pour cette phase). Seul le bouton "+ Créer un segment"
+est disponible : filtres manuels sur toute la base, notamment pour reproduire le ciblage géo
+de Gate 1 pour le post 14 ("Letzter Aufruf") à ton d'urgence envers les non-inscrits.
 
-### Objectif marketing
-Capitaliser sur l'émotion post-course et maximiser les ré-inscriptions 2027.
+Newsletter 5 ("an Angemeldete") s'adresse aux inscrits — une donnée que l'outil n'a pas
+(voir `registrationStatus2026`). Recommandation du brief : envoyer via une liste extraite
+d'onreg plutôt que ce dataset ; l'outil peut néanmoins générer le contenu.
+
+Le system prompt `gate2.custom_segment` gère les deux registres (logistique sobre pour les
+inscrits / urgence sans humour pour les non-inscrits) selon le contexte décrit par
+l'organisateur — voir `AI_PROMPTS.md`.
+
+---
+
+## Gate 3 — Renntag & danach
+
+### Quand
+Sa 26.9 – Me 30.9+. Stories live jour J, post du soir, Newsletter 6, post de clôture,
+cross-sell vers les autres Bike Marathon Classics.
 
 ### Segments prédéfinis
 
-Champ DB : `postRaceSegment`
+| Segment | Filtres | Channels |
+|---|---|---|
+| `toute_la_base` | aucun | newsletter, feed_post, story |
 
-| Segment | Emoji | Taille UI | Description | Objectif |
-|---|---|---|---|---|
-| `loyal_finisher` | 🏅 | 6,800 | Finisher + reRegistration > 0.7 | Early bird 2027 |
-| `champion_ambassador` | ⭐ | 1,400 | Finisher + personalBest + engagement > 75 | Programme ambassadeur |
-| `at_risk_returner` | ⚠️ | 2,100 | Finisher + reRegistration ≤ 0.4 | Reconquête proactive |
-| `lost_dns` | 🚫 | 1,200 | Did not start | Message empathique |
-| `reconquest_dnf` | 🔥 | 500 | Did not finish | Narrative de revanche |
+Pas de segmentation finisher/DNF/DNS : ces données n'existent que ~24h après la course et
+l'import n'existe pas encore (P1 — réutiliser le pattern Brand Voice pour un écran d'upload).
 
-**Total gate 3** : 12,000 athletes
-
-### Bannière impact IA (spécifique Gate 3)
-Affichée au-dessus des segments :
-> "Targeted re-registration campaigns could recover **1,950** additional athletes
-> worth **€97,500** in incremental revenue (82% vs 65% natural return rate)."
+### Cross-sell (décision D)
+`CampaignGenerator` propose, uniquement sur ce gate (`promoMode="siblingEvents"`), une
+sélection des `SIBLING_EVENTS` (`lib/constants.ts`) à mentionner en fin de message — rien
+cochée par défaut, activation laissée à l'organisateur.
 
 ---
 
-## Création de segments personnalisés (commun à toutes les gates)
+## Création de segments personnalisés (`SegmentBuilder`)
 
-### Accès
-Bouton "+ Créer un segment" dans le header de la colonne gauche, à droite du total.
+Réduit par rapport à Sparta (voir `IRONBIKE_BRIEF.md` §4.1ter) :
 
-### Composant : SegmentBuilder (modal)
+1. **Nom**
+2. **Scope** — pills des segments prédéfinis du gate (absent si le gate n'en a pas, ex. Gate 2)
+3. **Filtres manuels** — les 7 champs réels (`gender`, `age_min`, `age_max`, `nationality`,
+   `geoZone`, `hasEmail`, `registrationStatus2026`)
+4. **Objectif & contexte** — texte libre injecté dans le prompt
+5. **Compteur** — vrai compte via `POST /api/participants/count`, pas de mise à l'échelle
 
-**Section 1 — Nom** : champ texte libre
+Pas de section NL ("décrire en langage naturel") ni "objectif métier" — supprimées, voir
+`AI_PROMPTS.md`.
 
-**Section 2 — Décrire en langage naturel** (IA)
-- Textarea + bouton "Analyser →" (rouge)
-- Appel à `/api/ai/parse-segment`
-- Retourne : filtres structurés appliqués automatiquement + interprétation en vert
-- Raccourci : ⌘+Entrée
+## Statistiques (`SegmentStatsDrawer`)
 
-**Section 3 — Définir par objectif métier** (IA)
-- Textarea + bouton "Suggérer un segment →" (noir)
-- Appel à `/api/ai/suggest-segment` avec stats agrégées de la DB
-- Retourne :
-  - **Portrait** : description naturelle du segment (qui + pourquoi)
-  - **Filtres** : appliqués automatiquement
-  - **Insights** (fond jaune) : critères non-filtrables expliqués
-  - **Rationale** (italique) : justification des seuils choisis
-- Raccourci : ⌘+Entrée
-
-**Section 4 — Scope**
-- Pills des segments prédéfinis du gate (sélection multiple)
-- "Tous les athletes" si aucun sélectionné
-- Scope = pool sur lequel les filtres sont appliqués
-
-**Section 5 — Filtres manuels** (11 champs disponibles)
-
-Labels et valeurs affichés en anglais dans l'UI.
-
-| Champ | Label UI | Type | Options |
-|---|---|---|---|
-| `gender` | Gender | select | Male / Female |
-| `age_min` | Min age | number | 16–80 |
-| `age_max` | Max age | number | 16–80 |
-| `nationality` | Nationality | select | Denmark, Sweden, Germany, United Kingdom, Netherlands, Norway, France, USA, Italy, Switzerland, Poland, Belgium |
-| `isReturningAthlete` | Returning | select | Yes / No |
-| `total_editions_min` | Min editions | number | 0–20 |
-| `total_editions_max` | Max editions | number | 0–20 |
-| `engagement_min` | Min engagement | number | 0–100 |
-| `city_contains` | City | text | recherche partielle |
-| `distance` | Distance | select | Marathon 42K / Half Marathon 21K |
-| `hasInsurance` | Cancellation insurance | select | Yes / No |
-
-**Section 6 — Objectif & contexte** : texte libre injecté dans le prompt de génération
-
-**Section 7 — Compteur** : nombre d'athletes correspondant (mis à l'échelle vers les chiffres réels)
-
-### Scaling du compteur
-
-```
-Si scope = tous les athletes :
-  scaledCount = round(rawCount / 500 * GATE_TOTAL)
-
-Si scope = segments sélectionnés :
-  effectiveTotal = somme des tailles UI des segments sélectionnés
-  baseRaw = count(athletes in selected segments, no filter)
-  scaledCount = round(rawCount / baseRaw * effectiveTotal)
-```
-
-### Affichage du segment créé
-- Row dans la colonne gauche sous les segments prédéfinis
-- Point coloré + nom + compteur mis à l'échelle + bouton delete
-- Badge CUSTOM dans le panel campagne à droite
-- Génération via prompt `custom_segment` enrichi de `buildSegmentDescription()`
+Récupère un objet `ParticipantStats` via `POST /api/participants/stats` (jamais les
+participants eux-mêmes). Affiche : total, % joignable email, % statut 2026, répartition
+`geoZone`, nationalités, âge/genre.
 
 ---
 
-## Règles communes à toutes les gates
+## Règles communes
 
-1. **Un athlete = un segment par gate** — pas de double appartenance (segments prédéfinis)
-2. **Segments custom = mémoire React uniquement** — disparaissent au rechargement
-3. **Chiffres UI = constantes** — jamais calculés depuis la DB statique
-4. **Scaling obligatoire** — toujours mettre à l'échelle rawCount → chiffres réels
+1. **Segments custom = mémoire React uniquement** — disparaissent au rechargement.
+2. **Chiffres = vrais comptes** — jamais de constante `SEGMENT_SIZES` ni de scaling.
+3. **Aucune donnée participant côté client** — tout accès passe par `app/api/participants/*`.

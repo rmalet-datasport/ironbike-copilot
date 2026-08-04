@@ -13,10 +13,10 @@ avant l'appel API — ce qui permet de tester auth, validation et rate limiting.
 4. Body JSON malformé → pas de 500
 5. Bon mot de passe → cookie `demo_access` avec flags HttpOnly + SameSite
 6. Accès authentifié → page accessible
-7. Validations input sur les routes IA → 400 avant Anthropic
+7. Validations `/api/participants/*` (aggregate-only) + gate inconnu sur `/api/ai` → 400
 8. **Génération campagne dry-run** → valide gate/segment/channels sans appel Anthropic
-9. **Appel Anthropic réel** → intégrité JSON sur les 7 channels (nécessite `ANTHROPIC_API_KEY`)
-10. Rate limiting sur `/api/ai/parse-segment` → 429 après 20 req/min/IP
+9. **Appel Anthropic réel** → intégrité JSON sur les 3 channels (nécessite `ANTHROPIC_API_KEY`)
+10. Rate limiting sur `/api/ai` → 429 après 20 req/min/IP
 
 ### Groupe 8 — Dry-run (`_dryRun: true`)
 
@@ -30,12 +30,12 @@ Cas testés automatiquement :
 - Gate inconnu avec `_dryRun` → toujours 400 (validation avant le flag)
 - Channel invalide (`whatsapp`) → 400
 - `channelToRegenerate` → 200 + 1 seul asset
-- **7 channels simultanés** → 200 + shape vérifiée channel par channel (`subject`, `caption`, `utmCampaign`, etc.)
+- **3 channels simultanés** → 200 + shape vérifiée channel par channel (`copy`, `sentence`, `subject`)
 
 ### Groupe 9 — Appel Anthropic réel (`ANTHROPIC_API_KEY` requis)
 
-Ce test fait un vrai appel Anthropic avec les 7 channels (`email`, `sms`, `push`, `instagram`,
-`linkedin`, `facebook`, `partner`) pour valider deux choses critiques :
+Ce test fait un vrai appel Anthropic avec les 3 channels (`feed_post`, `story`, `newsletter`)
+pour valider deux choses critiques :
 
 1. **Intégrité JSON** : si `max_tokens` est trop bas, Claude tronque le JSON → `JSON.parse` lève
    une `SyntaxError` et le check échoue immédiatement.
@@ -63,20 +63,13 @@ npm run test:local
 
 ---
 
-## Tester la version déployée
+## Pas de déploiement serveur pour l'instant
 
-URL de prod : **https://sparta-copilot.lab.datasport.com**
+Décision (`IRONBIKE_BRIEF.md` §7bis) : chaque collègue lance l'outil en local sur sa machine
+(`npm install && npm run dev`), pas d'instance partagée type `lab.datasport.com`. Le script
+cible donc `http://localhost:3000` par défaut — `BASE_URL` reste disponible si une instance
+hébergée est mise en place plus tard (P1).
 
-```powershell
-# Tests sans Anthropic (groupes 1–8 + [10])
-$env:BASE_URL = "https://sparta-copilot.lab.datasport.com"; $env:DEMO_PASSWORD = "xxx"; node scripts/test-routes.mjs
-
-# Tests complets avec appel Claude réel (groupes 1–10)
-$env:BASE_URL = "https://sparta-copilot.lab.datasport.com"; $env:DEMO_PASSWORD = "xxx"; $env:ANTHROPIC_API_KEY = "sk-ant-..."; node scripts/test-routes.mjs
-```
-
-> Pas besoin de démarrer le serveur local — le script tape directement sur l'URL distante.
->
 > **Note** : le test [10] (rate limiting) s'exécute en dernier car il épuise intentionnellement
 > le quota — les tests dry-run [8] et l'appel Anthropic réel [9] doivent tourner avant.
 
@@ -174,14 +167,14 @@ npm run test:precommit
 
 ---
 
-## Variables d'environnement requises sur Vercel
-
-Trois variables à configurer dans **Settings → Environment variables** du projet Vercel :
+## Variables d'environnement requises en local (`.env.local`, par personne)
 
 | Variable | Description |
 |---|---|
-| `ANTHROPIC_API_KEY` | Clé API Anthropic (console.anthropic.com) |
-| `DEMO_PASSWORD` | Mot de passe partagé avec les participants à la démo |
+| `ANTHROPIC_API_KEY` | Clé API Anthropic (console.anthropic.com) — peut être partagée entre collègues |
+| `DEMO_PASSWORD` | N'importe quelle valeur en local mono-utilisateur — le gate d'accès n'a plus d'utilité réelle ici (P1 : le retirer pour l'usage local) |
 | `DEMO_COOKIE_SECRET` | Chaîne aléatoire ≥ 32 caractères pour signer le cookie de session |
 
-Sans ces trois variables, le déploiement démarre mais les routes IA et l'auth échouent.
+Sans ces trois variables, `npm run dev` démarre mais les routes IA et l'auth échouent.
+Chaque collègue a son propre `data/participants.csv` local (voir `IRONBIKE_BRIEF.md` §7bis) —
+jamais commité, distribué hors-git.
