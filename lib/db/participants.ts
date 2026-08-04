@@ -88,23 +88,52 @@ function hashId(parts: string[]): string {
   return `P-${digest.slice(0, 12)}`;
 }
 
-let cachedPromise: Promise<Participant[]> | null = null;
+export interface PrimoInscritStats {
+  count: number;
+  genderM: number;
+  genderF: number;
+  genderUnknown: number;
+}
 
-// Charge participants.csv, puis fusionne avec la liste des inscrits 2026 si le fichier
-// REGISTERED_PATH existe localement (voir mergeRegistrationStatus). Mis en cache une seule
-// fois par process — redémarrer le serveur de dev après avoir mis à jour l'un des deux fichiers.
-export function getParticipants(): Promise<Participant[]> {
+const EMPTY_PRIMO_STATS: PrimoInscritStats = { count: 0, genderM: 0, genderF: 0, genderUnknown: 0 };
+
+interface LoadResult {
+  participants: Participant[];
+  primoInscrits: PrimoInscritStats;
+}
+
+let cachedPromise: Promise<LoadResult> | null = null;
+
+function loadAll(): Promise<LoadResult> {
   if (!cachedPromise) {
-    cachedPromise = loadParticipants();
+    cachedPromise = computeAll();
   }
   return cachedPromise;
 }
 
-async function loadParticipants(): Promise<Participant[]> {
+// Charge participants.csv, puis fusionne avec la liste des inscrits 2026 si le fichier
+// REGISTERED_PATH existe localement (voir mergeRegistrationStatus + findPrimoInscrits). Mis
+// en cache une seule fois par process — redémarrer le serveur de dev après avoir mis à jour
+// l'un des deux fichiers.
+async function computeAll(): Promise<LoadResult> {
   const base = parseParticipantsCsv();
-  if (!fs.existsSync(REGISTERED_PATH)) return base;
+  if (!fs.existsSync(REGISTERED_PATH)) return { participants: base, primoInscrits: EMPTY_PRIMO_STATS };
   const registeredList = await loadRegisteredList(REGISTERED_PATH);
-  return mergeRegistrationStatus(base, registeredList);
+  const participants = mergeRegistrationStatus(base, registeredList);
+  const primoInscrits = findPrimoInscrits(base, registeredList);
+  return { participants, primoInscrits };
+}
+
+export function getParticipants(): Promise<Participant[]> {
+  return loadAll().then(r => r.participants);
+}
+
+// Inscrits 2026 qui n'existent dans aucune ligne de participants.csv — donc jamais couru
+// l'Iron Bike avant. Pas de Participant complet possible pour eux (aucune donnée démographique
+// dans l'export des inscrits au-delà du genre) : juste un compte + répartition genre, voir
+// IRONBIKE_BRIEF.md — traitement ajouté à la demande, pas dans le brief initial.
+export function getPrimoInscritsStats(): Promise<PrimoInscritStats> {
+  return loadAll().then(r => r.primoInscrits);
 }
 
 function parseParticipantsCsv(): Participant[] {
@@ -185,14 +214,16 @@ export interface RegisteredEntry {
   email?: string;
   firstName?: string;
   lastName?: string;
-  birthDate?: string; // ISO yyyy-mm-dd — absent dans l'export actuel (colonnes Vorname/Nachname/E-Mail uniquement)
+  birthDate?: string; // ISO yyyy-mm-dd — absent dans l'export actuel (colonnes Vorname/Nachname/Geschlecht/E-Mail uniquement)
+  gender?: 'M' | 'F' | 'unknown';
 }
 
-const REGISTERED_COLUMN_ALIASES: Record<keyof RegisteredEntry, string[]> = {
+const REGISTERED_COLUMN_ALIASES: Record<'firstName' | 'lastName' | 'email' | 'birthDate' | 'gender', string[]> = {
   firstName: ['vorname', 'firstname', 'prénom', 'prenom'],
   lastName: ['nachname', 'lastname', 'nom'],
   email: ['e-mail', 'email', 'mail'],
   birthDate: ['geburtsdatum', 'birthdate', 'date de naissance'],
+  gender: ['geschlecht', 'gender', 'genre', 'sexe'],
 };
 
 async function loadRegisteredList(filePath: string): Promise<RegisteredEntry[]> {
@@ -219,11 +250,13 @@ async function loadRegisteredList(filePath: string): Promise<RegisteredEntry[]> 
       const v = row.getCell(c).value;
       return v == null ? undefined : String(v).trim() || undefined;
     };
+    const genderRaw = get('gender')?.trim().toUpperCase();
     const entry: RegisteredEntry = {
       firstName: get('firstName'),
       lastName: get('lastName'),
       email: get('email')?.toLowerCase(),
       birthDate: get('birthDate'),
+      gender: genderRaw === 'M' || genderRaw === 'F' ? genderRaw : 'unknown',
     };
     if (entry.firstName || entry.lastName || entry.email) entries.push(entry);
   }
@@ -265,4 +298,40 @@ export function mergeRegistrationStatus(
       registrationStatus2026: (matched ? 'registered' : 'not_registered') as Participant['registrationStatus2026'],
     };
   });
+}
+
+// Inverse de mergeRegistrationStatus : inscrits 2026 qui ne matchent AUCUNE ligne de
+// participants.csv (email / nom+naissance / nom seul) — donc jamais couru l'Iron Bike avant.
+// Mêmes trois paliers de confiance, dans l'autre sens.
+function findPrimoInscrits(participants: Participant[], registeredList: RegisteredEntry[]): PrimoInscritStats {
+  const emailSet = new Set<string>();
+  const nameDobSet = new Set<string>();
+  const nameOnlySet = new Set<string>();
+
+  for (const p of participants) {
+    if (p.email) emailSet.add(p.email);
+    const nameKey = `${p.firstName.toLowerCase()}|${p.lastName.toLowerCase()}`;
+    if (p.birthDate) nameDobSet.add(`${nameKey}|${p.birthDate}`);
+    nameOnlySet.add(nameKey);
+  }
+
+  const stats: PrimoInscritStats = { count: 0, genderM: 0, genderF: 0, genderUnknown: 0 };
+
+  for (const entry of registeredList) {
+    const nameKey = entry.firstName && entry.lastName
+      ? `${entry.firstName.toLowerCase()}|${entry.lastName.toLowerCase()}`
+      : undefined;
+    const matchedByEmail = !!entry.email && emailSet.has(entry.email);
+    const matchedByNameDob = !!nameKey && !!entry.birthDate && nameDobSet.has(`${nameKey}|${entry.birthDate}`);
+    const matchedByNameOnly = !!nameKey && nameOnlySet.has(nameKey);
+
+    if (!matchedByEmail && !matchedByNameDob && !matchedByNameOnly) {
+      stats.count++;
+      if (entry.gender === 'M') stats.genderM++;
+      else if (entry.gender === 'F') stats.genderF++;
+      else stats.genderUnknown++;
+    }
+  }
+
+  return stats;
 }

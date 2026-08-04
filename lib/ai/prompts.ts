@@ -139,6 +139,26 @@ Erreichbarkeit einer bestimmten Person.
 
 ${FORMAT_INSTRUCTION}`,
 
+    primo_inscrits: `${BASE_PROMPT}
+
+Segment-Kontext:
+Menschen, die sich für 2026 angemeldet haben, aber das Iron Bike Race noch nie gefahren sind.
+Kein gemeinsames Erlebnis, keine Insiderwitze, die sie schon verstehen — sie kennen den Schlamm
+und die kaputten Schaltungen noch nicht aus eigener Erfahrung.
+
+Ziel: Herzlich willkommen heissen, ohne Insiderwissen vorauszusetzen. Neugier auf das wecken,
+was sie erwartet — die Insiderwitze einführen statt sie zu benutzen.
+
+Zu verwenden:
+- Willkommen in der Community, ohne Kitsch
+- Kurz erklären statt referenzieren (sie waren nicht dabei, als der Schlamm legendär wurde)
+- Praktische Neugier wecken: was sie erwartet, ohne zu beschönigen
+- Ton: Du-Form, warm aber trocken, kein Trauerrhetorik-Verbot lockern — es ist trotzdem die
+  letzte Austragung, das darf mitschwingen, aber nicht der Fokus sein
+- Maximal ein Emoji
+
+${FORMAT_INSTRUCTION}`,
+
     custom_segment: `${BASE_PROMPT}
 
 Segment-Kontext:

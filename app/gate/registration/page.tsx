@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import GateTimeline from '@/components/gates/GateTimeline';
 import SegmentCard from '@/components/gates/SegmentCard';
 import ChannelSelector from '@/components/gates/ChannelSelector';
@@ -16,6 +16,22 @@ import { useParticipantCounts } from '@/lib/hooks/useParticipantCounts';
 
 const SEGMENTS = PREDEFINED_SEGMENTS.gate1;
 
+// Pas un PredefinedSegment classique : ces gens n'ont jamais couru l'Iron Bike, donc aucune
+// ligne dans participants.csv — pas de filtres possibles, juste un compte réel (voir
+// /api/participants/primo-inscrits et lib/db/participants.ts → findPrimoInscrits).
+const PRIMO_SEGMENT = {
+  id: 'primo_inscrits',
+  label: 'Erstanmeldungen 2026',
+  icon: '🆕',
+  color: '#0891B2',
+  colorBg: '#ECFEFF',
+  description: 'Für 2026 angemeldet, aber noch nie beim Iron Bike Race dabei gewesen — kein Eintrag in der historischen Basis.',
+  objective: 'Willkommen heissen ohne Insiderwissen vorauszusetzen — anderer Ton als die Reaktivierung.',
+  channels: ['newsletter', 'feed_post'] as Channel[],
+};
+
+interface PrimoStats { count: number; genderM: number; genderF: number; genderUnknown: number }
+
 type DrawerData = { name: string; description: string; color: string; criteria: { l: string; v: string }[]; filters: FilterCondition[]; scopeFilterGroups?: FilterCondition[][]; segmentId: string }
 
 export default function RegistrationPage() {
@@ -25,9 +41,20 @@ export default function RegistrationPage() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingSegment, setEditingSegment] = useState<CustomSegment | null>(null);
   const [statsDrawer, setStatsDrawer] = useState<DrawerData | null>(null);
+  const [primoStats, setPrimoStats] = useState<PrimoStats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/participants/primo-inscrits')
+      .then(res => res.json())
+      .then(data => { if (!cancelled) setPrimoStats(data.stats ?? null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const selectedStatic = SEGMENTS.find(s => s.id === selectedId);
   const selectedCustom = customSegments.find(s => s.id === selectedId);
+  const isPrimoSelected = selectedId === PRIMO_SEGMENT.id;
 
   const countQueries = [
     { id: 'total', filters: [] as FilterCondition[] },
@@ -50,6 +77,7 @@ export default function RegistrationPage() {
   const handleSelect = (id: string) => {
     if (selectedId === id) { setSelectedId(null); setChannels([]); return; }
     setSelectedId(id);
+    if (id === PRIMO_SEGMENT.id) { setChannels(PRIMO_SEGMENT.channels); return; }
     const staticSeg = SEGMENTS.find(s => s.id === id);
     setChannels(staticSeg ? staticSeg.channels : ['newsletter']);
   };
@@ -150,6 +178,19 @@ export default function RegistrationPage() {
             />
           ))}
 
+          <SegmentCard
+            segment={PRIMO_SEGMENT.id}
+            label={PRIMO_SEGMENT.label}
+            size={primoStats?.count ?? 0}
+            description={PRIMO_SEGMENT.description}
+            color={PRIMO_SEGMENT.color}
+            colorBg={PRIMO_SEGMENT.colorBg}
+            channels={PRIMO_SEGMENT.channels}
+            isSelected={isPrimoSelected}
+            onClick={() => handleSelect(PRIMO_SEGMENT.id)}
+            icon={PRIMO_SEGMENT.icon}
+          />
+
           {/* Custom segments */}
           {customSegments.length > 0 && (
             <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -182,7 +223,41 @@ export default function RegistrationPage() {
         </div>
 
         {/* Right: campaign panel */}
-        {selectedStatic ? (
+        {isPrimoSelected ? (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-xl)', padding: '20px' }}>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>{PRIMO_SEGMENT.icon}</span>
+                  <h3 style={{ fontSize: 15, fontWeight: 570, margin: 0, color: 'var(--fg-1)' }}>{PRIMO_SEGMENT.label}</h3>
+                  <span style={{ fontSize: 13, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
+                    {(primoStats?.count ?? 0).toLocaleString('en-US')} participants
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--fg-3)' }}>{PRIMO_SEGMENT.objective}</p>
+              </div>
+              <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
+              <div style={{ marginBottom: 20 }}>
+                <ChannelSelector
+                  available={PRIMO_SEGMENT.channels}
+                  selected={channels}
+                  onChange={setChannels}
+                />
+              </div>
+              <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
+              <CampaignGenerator
+                gate="gate1"
+                segment={PRIMO_SEGMENT.id}
+                channels={channels}
+                segmentSize={primoStats?.count ?? 0}
+                gateLabel="Anmeldephase"
+                segmentName={PRIMO_SEGMENT.label}
+                segmentColor={PRIMO_SEGMENT.color}
+                segmentColorBg={PRIMO_SEGMENT.colorBg}
+              />
+            </div>
+          </div>
+        ) : selectedStatic ? (
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-xl)', padding: '20px' }}>
               <div style={{ marginBottom: 20 }}>
