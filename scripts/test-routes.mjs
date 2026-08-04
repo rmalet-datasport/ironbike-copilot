@@ -1,7 +1,7 @@
 /**
  * Route health check — runs against the local dev server (or any BASE_URL).
- * Does NOT call Anthropic. AI routes are tested via invalid inputs that fail
- * before the API call, which lets us verify auth, validation, and rate limiting.
+ * Does NOT call Anthropic (except test [9]). AI route validation is tested via invalid
+ * inputs that fail before the API call, which lets us verify auth, validation, and rate limiting.
  *
  * Usage:
  *   $env:DEMO_PASSWORD="your_password"; node scripts/test-routes.mjs
@@ -47,7 +47,7 @@ console.log('\n[1] Unauthenticated access to protected page')
 // 2. UNAUTHENTICATED — protected API should also redirect
 console.log('\n[2] Unauthenticated access to protected API route')
 {
-  const res = await r('/api/ai/parse-segment', { body: { text: 'test' } })
+  const res = await r('/api/participants/count', { body: { filters: [] } })
   check('blocked (3xx or 4xx)',        res.status >= 300, `status=${res.status}`)
 }
 
@@ -96,82 +96,85 @@ if (!cookie) {
   check('not redirected to /access',  !res.headers.get('location')?.includes('/access'), `location=${res.headers.get('location') ?? 'none'}, status=${res.status}`)
 }
 
-// 7. AI ROUTE VALIDATIONS (no Anthropic calls — invalid bodies return 4xx before the API call)
-console.log('\n[7] AI route input validation')
+// 7. PARTICIPANTS ROUTE VALIDATIONS (real data, aggregates only — never raw rows)
+console.log('\n[7] Participants route validation')
 if (!cookie) {
   skip('no cookie from step 5')
 } else {
-  // parse-segment: empty text → 400 before Anthropic
-  const p1 = await r('/api/ai/parse-segment', { cookie, body: { text: '' } })
-  check('parse-segment: empty text → 400',        p1.status === 400, `status=${p1.status}`)
+  const p1 = await r('/api/participants/count', { cookie, body: { filters: [] } })
+  check('count: no filters → 200', p1.status === 200, `status=${p1.status}`)
+  if (p1.status === 200) {
+    const json = JSON.parse(await p1.text())
+    check('count: returns a number', typeof json.count === 'number', JSON.stringify(json))
+    check('count: no raw rows in response', !JSON.stringify(json).includes('firstName'), 'response leaked participant fields')
+  }
 
-  // suggest-segment: empty objective → 400 before Anthropic
-  const p2 = await r('/api/ai/suggest-segment', { cookie, body: { objective: '' } })
-  check('suggest-segment: empty objective → 400', p2.status === 400, `status=${p2.status}`)
+  const p2 = await r('/api/participants/stats', { cookie, body: { filters: [{ id: 'f1', field: 'hasEmail', value: 'true' }] } })
+  check('stats: hasEmail filter → 200', p2.status === 200, `status=${p2.status}`)
+  if (p2.status === 200) {
+    const json = JSON.parse(await p2.text())
+    check('stats: no raw rows in response', !JSON.stringify(json).includes('firstName'), 'response leaked participant fields')
+  }
 
   // main AI route: unknown gate → 400 before Anthropic
   const p3 = await r('/api/ai', { cookie, body: { gate: 'unknown', segment: 'x', channels: [] } })
-  check('main ai route: unknown gate → 400',      p3.status === 400, `status=${p3.status}`)
+  check('main ai route: unknown gate → 400', p3.status === 400, `status=${p3.status}`)
 }
 
 // 8. DRY-RUN campaign generation (no Anthropic call)
 // Uses _dryRun: true — routes through full auth + validation but skips the Anthropic call.
-// Must run BEFORE the rate-limit test [9] which intentionally exhausts the quota.
+// Must run BEFORE the rate-limit test [10] which intentionally exhausts the quota.
 console.log('\n[8] Dry-run campaign generation (no Anthropic call)')
 if (!cookie) {
   skip('no cookie from step 5')
 } else {
   // Valid gate/segment combinations — one per gate
   const DRY_RUN_CASES = [
-    { gate: 'gate0', segment: 'past_finishers' },
-    { gate: 'gate1', segment: 'ambassador' },
-    { gate: 'gate2', segment: 'confirmed_engaged' },
-    { gate: 'gate3', segment: 'loyal_finisher' },
+    { gate: 'gate0', segment: 'toute_la_base' },
+    { gate: 'gate1', segment: 'reactivation_kernradius' },
     { gate: 'gate1', segment: 'custom_segment' },
+    { gate: 'gate2', segment: 'custom_segment' },
+    { gate: 'gate3', segment: 'toute_la_base' },
   ]
   for (const { gate, segment } of DRY_RUN_CASES) {
-    const res = await r('/api/ai', { cookie, body: { gate, segment, channels: ['email', 'push'], _dryRun: true } })
+    const res = await r('/api/ai', { cookie, body: { gate, segment, channels: ['feed_post', 'newsletter'], _dryRun: true } })
     check(`${gate}/${segment}: 200`, res.status === 200, `status=${res.status}`)
     if (res.status === 200) {
       const json = JSON.parse(await res.text())
       check(`${gate}/${segment}: assets array`, Array.isArray(json?.assets), JSON.stringify(json).slice(0, 80))
       check(`${gate}/${segment}: 2 assets`, json?.assets?.length === 2, `got ${json?.assets?.length}`)
-      check(`${gate}/${segment}: email asset shape`, json?.assets?.[0]?.subject !== undefined, JSON.stringify(json?.assets?.[0]).slice(0, 80))
+      check(`${gate}/${segment}: feed_post asset shape`, json?.assets?.[0]?.copy !== undefined, JSON.stringify(json?.assets?.[0]).slice(0, 80))
     }
   }
 
   // Invalid gate → 400 (validation runs before dry-run check)
-  const badGate = await r('/api/ai', { cookie, body: { gate: 'gate9', segment: 'foo', channels: ['email'], _dryRun: true } })
+  const badGate = await r('/api/ai', { cookie, body: { gate: 'gate9', segment: 'foo', channels: ['feed_post'], _dryRun: true } })
   check('unknown gate → 400 even with _dryRun', badGate.status === 400, `status=${badGate.status}`)
 
   // Invalid channel → 400
-  const badCh = await r('/api/ai', { cookie, body: { gate: 'gate1', segment: 'ambassador', channels: ['whatsapp'], _dryRun: true } })
+  const badCh = await r('/api/ai', { cookie, body: { gate: 'gate1', segment: 'reactivation_kernradius', channels: ['whatsapp'], _dryRun: true } })
   check('unknown channel → 400', badCh.status === 400, `status=${badCh.status}`)
 
   // channelToRegenerate path
-  const regen = await r('/api/ai', { cookie, body: { gate: 'gate1', segment: 'ambassador', channelToRegenerate: 'email', customInstructions: 'Test', _dryRun: true } })
+  const regen = await r('/api/ai', { cookie, body: { gate: 'gate1', segment: 'reactivation_kernradius', channelToRegenerate: 'newsletter', customInstructions: 'Test', _dryRun: true } })
   check('channelToRegenerate dry-run → 200', regen.status === 200, `status=${regen.status}`)
   if (regen.status === 200) {
     const json = JSON.parse(await regen.text())
     check('channelToRegenerate: 1 asset', json?.assets?.length === 1, `got ${json?.assets?.length}`)
   }
 
-  // All 7 valid channels — shape check per asset
-  const ALL_VALID = ['email', 'sms', 'push', 'instagram', 'linkedin', 'facebook', 'partner']
-  const allRes = await r('/api/ai', { cookie, body: { gate: 'gate3', segment: 'champion_ambassador', channels: ALL_VALID, _dryRun: true } })
-  check('all 7 channels dry-run → 200', allRes.status === 200, `status=${allRes.status}`)
+  // All 3 valid channels — shape check per asset
+  const ALL_VALID = ['feed_post', 'story', 'newsletter']
+  const allRes = await r('/api/ai', { cookie, body: { gate: 'gate3', segment: 'toute_la_base', channels: ALL_VALID, _dryRun: true } })
+  check('all 3 channels dry-run → 200', allRes.status === 200, `status=${allRes.status}`)
   if (allRes.status === 200) {
     const json = JSON.parse(await allRes.text())
-    check('all 7 channels: 7 assets', json?.assets?.length === 7, `got ${json?.assets?.length}`)
+    check('all 3 channels: 3 assets', json?.assets?.length === 3, `got ${json?.assets?.length}`)
     const byChannel = Object.fromEntries(json.assets.map(a => [a.channel, a]))
     const SHAPES = {
-      email:     a => a?.subject !== undefined,
-      sms:       a => a?.body !== undefined,
-      push:      a => a?.title !== undefined && a?.body !== undefined,
-      instagram: a => a?.caption !== undefined,
-      linkedin:  a => a?.title !== undefined && a?.body !== undefined,
-      facebook:  a => a?.title !== undefined && a?.body !== undefined,
-      partner:   a => a?.utmCampaign !== undefined && a?.distributionPoints !== undefined,
+      feed_post:  a => a?.copy !== undefined,
+      story:      a => a?.sentence !== undefined,
+      newsletter: a => a?.subject !== undefined,
     }
     for (const [ch, shapeFn] of Object.entries(SHAPES)) {
       check(`${ch} asset shape`, shapeFn(byChannel[ch]), JSON.stringify(byChannel[ch] ?? {}).slice(0, 80))
@@ -179,11 +182,11 @@ if (!cookie) {
   }
 }
 
-// 9. REAL AI CALL — all 7 channels (requires ANTHROPIC_API_KEY)
+// 9. REAL AI CALL — all 3 channels (requires ANTHROPIC_API_KEY)
 // Validates that max_tokens is sufficient: truncated JSON would fail JSON.parse.
 // Also confirms each channel returns a well-shaped asset from a live Anthropic response.
 // Runs BEFORE the rate-limit test [10] which intentionally exhausts the quota.
-console.log('\n[9] Real Anthropic call — all 7 channels, full JSON integrity')
+console.log('\n[9] Real Anthropic call — all 3 channels, full JSON integrity')
 const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY
 if (!cookie) {
   skip('no cookie from step 5')
@@ -194,8 +197,8 @@ if (!cookie) {
     cookie,
     body: {
       gate: 'gate3',
-      segment: 'champion_ambassador',
-      channels: ['email', 'sms', 'push', 'instagram', 'linkedin', 'facebook', 'partner'],
+      segment: 'toute_la_base',
+      channels: ['feed_post', 'story', 'newsletter'],
     },
   })
   check('real call → 200', res.status === 200, `status=${res.status}`)
@@ -208,16 +211,12 @@ if (!cookie) {
       ko('response is valid JSON (not truncated)', e.message.slice(0, 80))
     }
     if (json) {
-      check('7 assets returned', json?.assets?.length === 7, `got ${json?.assets?.length}`)
+      check('3 assets returned', json?.assets?.length === 3, `got ${json?.assets?.length}`)
       const byChannel = Object.fromEntries((json.assets ?? []).map(a => [a.channel, a]))
       const SHAPES = {
-        email:     a => a?.subject !== undefined,
-        sms:       a => a?.body !== undefined,
-        push:      a => a?.title !== undefined && a?.body !== undefined,
-        instagram: a => a?.caption !== undefined,
-        linkedin:  a => a?.title !== undefined && a?.body !== undefined,
-        facebook:  a => a?.title !== undefined && a?.body !== undefined,
-        partner:   a => a?.utmCampaign !== undefined && a?.distributionPoints !== undefined,
+        feed_post:  a => a?.copy !== undefined,
+        story:      a => a?.sentence !== undefined,
+        newsletter: a => a?.subject !== undefined,
       }
       for (const [ch, shapeFn] of Object.entries(SHAPES)) {
         check(`${ch} asset shape (live)`, shapeFn(byChannel[ch]), JSON.stringify(byChannel[ch] ?? {}).slice(0, 80))
@@ -230,7 +229,7 @@ if (!cookie) {
 // Note: on a remote server, X-Forwarded-For is set by the infrastructure so the test IP
 // below is a best-effort hint for local dev only. This test intentionally exhausts the
 // rate limit — always runs LAST to avoid polluting the quota for other tests.
-console.log('\n[10] Rate limit on /api/ai/parse-segment (20 req/min/IP)')
+console.log('\n[10] Rate limit on /api/ai (20 req/min/IP)')
 if (!cookie) {
   skip('no cookie from step 5')
 } else {
@@ -238,7 +237,7 @@ if (!cookie) {
   let hit429 = false
   let attempts = 0
   for (let i = 0; i < 25; i++) {
-    const res = await r('/api/ai/parse-segment', { cookie, ip: TEST_IP, body: { text: '' } })
+    const res = await r('/api/ai', { cookie, ip: TEST_IP, body: { gate: 'gate9', segment: 'x', channels: [], _dryRun: true } })
     attempts++
     if (res.status === 429) { hit429 = true; break }
   }

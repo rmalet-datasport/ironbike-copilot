@@ -1,6 +1,7 @@
 'use client';
 
 import type { Channel } from '@/lib/constants';
+import { CHANNELS, CHANNEL_LABELS } from '@/lib/constants';
 
 interface ChannelSelectorProps {
   available: Channel[];
@@ -10,61 +11,26 @@ interface ChannelSelectorProps {
 }
 
 const CHANNEL_ICONS: Record<Channel, React.ReactNode> = {
-  email: (
+  feed_post: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+      <rect x="3.5" y="3.5" width="7" height="4" rx="0.5" fill="currentColor" opacity="0.25"/>
+      <path d="M3.5 9.5h5M3.5 11h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+    </svg>
+  ),
+  story: (
+    <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+      <rect x="1.5" y="0.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <rect x="3" y="2" width="8" height="4.5" rx="0.5" fill="currentColor" opacity="0.3"/>
+      <path d="M3 8h8M3 9.5h5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+    </svg>
+  ),
+  newsletter: (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <rect x="1.5" y="3" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
       <path d="M1.5 5.5l5.5 3 5.5-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   ),
-  sms: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="1.5" y="2" width="11" height="7.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M4 12l2-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  ),
-  push: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 1.5v1M10.5 3l-.75.75M3.5 3l.75.75" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <path d="M2.5 9h9l-1.2-5a3.3 3.3 0 00-6.6 0L2.5 9Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M5.5 9a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/>
-    </svg>
-  ),
-  instagram: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="2" y="2" width="10" height="10" rx="3" stroke="currentColor" strokeWidth="1.3"/>
-      <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.3"/>
-      <circle cx="10.2" cy="3.8" r="0.8" fill="currentColor"/>
-    </svg>
-  ),
-  linkedin: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M4 6v4.5M4 4.5v.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      <path d="M7 10.5V8c0-1.1.9-2 2-2s2 .9 2 2v2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <path d="M7 6v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  ),
-  facebook: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M8.5 4.5H7.5C6.67 4.5 6 5.17 6 6v.5H5V8h1v4h2V8h1.5L9.8 6.5H8V6c0-.28.22-.5.5-.5h1V4.5z" fill="currentColor"/>
-    </svg>
-  ),
-  partner: (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <rect x="1.5" y="1.5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-      <rect x="8.5" y="1.5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-      <rect x="1.5" y="8.5" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-      <rect x="2.8" y="2.8" width="1.4" height="1.4" fill="currentColor"/>
-      <rect x="9.8" y="2.8" width="1.4" height="1.4" fill="currentColor"/>
-      <rect x="2.8" y="9.8" width="1.4" height="1.4" fill="currentColor"/>
-      <path d="M8.5 8.5h1.5v1.5M10 10v2.5M12 8.5v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-};
-
-const CHANNEL_LABELS: Record<Channel, string> = {
-  email: 'Email', sms: 'SMS', push: 'Push', instagram: 'Instagram', linkedin: 'LinkedIn', facebook: 'Facebook', partner: 'Partner',
 };
 
 export default function ChannelSelector({ available, selected, onChange, rationale }: ChannelSelectorProps) {
@@ -75,8 +41,6 @@ export default function ChannelSelector({ available, selected, onChange, rationa
       onChange([...selected, ch]);
     }
   };
-
-  const ALL_CHANNELS: Channel[] = ['email', 'sms', 'push', 'instagram', 'linkedin', 'facebook', 'partner'];
 
   return (
     <div>
@@ -91,7 +55,7 @@ export default function ChannelSelector({ available, selected, onChange, rationa
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {ALL_CHANNELS.map(ch => {
+        {CHANNELS.map(ch => {
           const isRecommended = available.includes(ch);
           const isSelected = selected.includes(ch);
 

@@ -1,158 +1,56 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import GateTimeline from '@/components/gates/GateTimeline';
 import SegmentCard from '@/components/gates/SegmentCard';
 import ChannelSelector from '@/components/gates/ChannelSelector';
 import CampaignGenerator from '@/components/campaign/CampaignGenerator';
-import SegmentBuilder from '@/components/gates/SegmentBuilder';
-import AISubSegments from '@/components/gates/AISubSegments';
-import { SEGMENT_SIZES, DEFAULT_CHANNELS, KPI, EVENT } from '@/lib/constants';
-import type { Channel } from '@/lib/constants';
-import { filterAthletes } from '@/lib/db/segment-filter';
-import type { CustomSegment } from '@/lib/types/segments';
-import { buildSegmentDescription, FILTER_FIELD_LABELS, FILTER_VALUE_OPTIONS } from '@/lib/types/segments';
 import SegmentStatsDrawer from '@/components/gates/SegmentStatsDrawer';
+import { EVENT } from '@/lib/constants';
+import type { Channel } from '@/lib/constants';
+import { PREDEFINED_SEGMENTS } from '@/lib/segments/predefined';
+import { FILTER_FIELD_LABELS, FILTER_VALUE_OPTIONS } from '@/lib/types/segments';
+import { useParticipantCounts } from '@/lib/hooks/useParticipantCounts';
 
-type DrawerData = { name: string; description: string; color: string; criteria: { l: string; v: string }[]; athleteIds: string[]; scaledSize: number; segmentId: string }
+const SEGMENTS = PREDEFINED_SEGMENTS.gate0;
 
-const SEGMENTS = [
-  {
-    id: 'past_finishers',
-    label: 'Past Finishers',
-    color: '#16A34A',
-    colorBg: '#F0FDF4',
-    description: 'Athletes who finished in 2021-2025 but have not applied for 2026 yet.',
-    size: SEGMENT_SIZES.gate0.past_finishers,
-    objective: 'Re-activate before ballot closes. Emotional hook on their past experience.',
-    icon: '🏅',
-    rationale: { email: 'Warm reactivation - reference their past finish.', push: 'App-engaged returning athletes.' } as Partial<Record<Channel, string>>,
-  },
-  {
-    id: 'past_refused',
-    label: 'Past Refused',
-    color: '#EA580C',
-    colorBg: '#FFF7ED',
-    description: 'Athletes who applied in previous editions but were not selected.',
-    size: SEGMENT_SIZES.gate0.past_refused,
-    objective: 'Restore confidence. Each lottery is a fresh start.',
-    icon: '🔄',
-    rationale: { email: 'Empathetic tone - acknowledge the past rejection.', sms: 'Soft nudge to apply again.' } as Partial<Record<Channel, string>>,
-  },
-  {
-    id: 'international_targets',
-    label: 'International Targets',
-    color: '#2563EB',
-    colorBg: '#EFF6FF',
-    description: 'Runner audiences in DE, UK, NL, NO - new acquisition priority.',
-    size: SEGMENT_SIZES.gate0.international_targets,
-    objective: 'Present Copenhagen as the unmissable European marathon experience.',
-    icon: '🌍',
-    rationale: { email: 'Aspirational destination marketing.', instagram: 'Visual storytelling for international reach.' } as Partial<Record<Channel, string>>,
-  },
-  {
-    id: 'external_prospects',
-    label: 'External Prospects',
-    color: '#7C3AED',
-    colorBg: '#F5F3FF',
-    description: 'Imported from Nike RC, Intersport, Parkrun. First contact with the event.',
-    size: SEGMENT_SIZES.gate0.external_prospects,
-    objective: 'Strong first impression. One clear CTA: apply now.',
-    icon: '🤝',
-    rationale: { email: 'Simple, clear. Reference the partner source for trust.' } as Partial<Record<Channel, string>>,
-  },
-];
-
-const HISTORICAL = [
-  { year: 2025, applicants: 18500, finishers: 10800 },
-  { year: 2024, applicants: 17200, finishers: 10200 },
-  { year: 2023, applicants: 15800, finishers: 9600 },
-  { year: 2022, applicants: 14200, finishers: 8900 },
-  { year: 2021, applicants: 11500, finishers: 7200 },
-];
-
-const GATE_TOTAL = Object.values(SEGMENT_SIZES.gate0).reduce((a, b) => a + b, 0);
-const sizes = SEGMENT_SIZES.gate0;
-const DB_SIZE = 500;
-const SEGMENT_FIELD = 'gate0Segment';
-const GATE_SEGMENTS = SEGMENTS.map(s => ({ id: s.id, label: s.label, color: s.color }));
+type DrawerData = { name: string; description: string; color: string; criteria: { l: string; v: string }[]; segmentId: string }
 
 export default function CreationPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [customSegments, setCustomSegments] = useState<CustomSegment[]>([]);
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [editingSegment, setEditingSegment] = useState<CustomSegment | null>(null);
-  const [aiParentId, setAiParentId] = useState<string>('__full_pool__');
+  const [statsDrawer, setStatsDrawer] = useState<DrawerData | null>(null);
 
   const selected = SEGMENTS.find(s => s.id === selectedId);
-  const selectedCustom = customSegments.find(s => s.id === selectedId);
-  const kpi = KPI.gate0;
 
-  const aiParentInfo = useMemo(() => {
-    if (aiParentId === '__full_pool__') {
-      return { label: 'All pre-ballot prospects', scaledSize: GATE_TOTAL, athleteIds: [] as string[] };
-    }
-    const seg = SEGMENTS.find(s => s.id === aiParentId);
-    if (!seg) return { label: 'All prospects', scaledSize: GATE_TOTAL, athleteIds: [] as string[] };
-    return {
-      label: seg.label,
-      scaledSize: seg.size,
-      athleteIds: filterAthletes([], [seg.id], SEGMENT_FIELD).map(a => a.id),
-    };
-  }, [aiParentId]);
+  const counts = useParticipantCounts([
+    { id: 'total', filters: [] },
+    ...SEGMENTS.map(s => ({ id: s.id, filters: s.filters })),
+  ]);
+  const total = counts.total;
 
   const handleSelect = (id: string) => {
     if (selectedId === id) { setSelectedId(null); setChannels([]); return; }
     setSelectedId(id);
-    setChannels((DEFAULT_CHANNELS[id] ?? ['email']) as Channel[]);
-    if (SEGMENTS.some(s => s.id === id)) setAiParentId(id);
+    const seg = SEGMENTS.find(s => s.id === id);
+    setChannels(seg ? seg.channels : []);
   };
-
-  const handleAISubSelect = (seg: CustomSegment) => {
-    setCustomSegments(prev => prev.some(s => s.id === seg.id) ? prev : [...prev, seg]);
-    setSelectedId(seg.id);
-    setChannels(['email']);
-  };
-
-  const [statsDrawer, setStatsDrawer] = useState<DrawerData | null>(null);
 
   const handleViewStats = (seg: typeof SEGMENTS[0]) => {
-    const ids = filterAthletes([], [seg.id], SEGMENT_FIELD).map(a => a.id)
-    setStatsDrawer({ name: seg.label, description: seg.description, color: seg.color, criteria: [], athleteIds: ids, scaledSize: seg.size, segmentId: seg.id })
-  }
-
-  const handleViewStatsCustom = (seg: CustomSegment) => {
-    const base = seg.baseSegmentIds.length > 0 ? seg.baseSegmentIds : undefined
-    const ids = filterAthletes(seg.filters, base, SEGMENT_FIELD).map(a => a.id)
-    setStatsDrawer({ name: seg.name, description: seg.objective ?? '', color: seg.color, criteria: seg.filters.map(f => ({ l: FILTER_FIELD_LABELS[f.field], v: FILTER_VALUE_OPTIONS[f.field]?.find(o => o.value === f.value)?.label ?? f.value })), athleteIds: ids, scaledSize: getScaledCount(seg), segmentId: seg.id })
-  }
-
-  const handleEditPredefined = (seg: typeof SEGMENTS[0]) => {
-    setEditingSegment({ id: `${seg.id}_custom`, name: seg.label, color: seg.color, colorBg: seg.colorBg, filters: [], baseSegmentIds: [seg.id], baseSegmentLabels: [seg.label], objective: seg.objective })
-    setShowBuilder(true)
-  }
-
-  const getScaledCount = (seg: CustomSegment) => {
-    const base = seg.baseSegmentIds.length > 0 ? seg.baseSegmentIds : undefined;
-    const raw = filterAthletes(seg.filters, base, SEGMENT_FIELD).length;
-    if (seg.baseSegmentIds.length === 0) return Math.round(raw / DB_SIZE * GATE_TOTAL);
-    const baseTotal = seg.baseSegmentIds.reduce((sum, id) => sum + (sizes[id as keyof typeof sizes] ?? 0), 0);
-    const baseRaw = filterAthletes([], seg.baseSegmentIds, SEGMENT_FIELD).length;
-    return baseRaw > 0 ? Math.round(raw / baseRaw * baseTotal) : 0;
+    setStatsDrawer({ name: seg.label, description: seg.description, color: seg.color, criteria: [], segmentId: seg.id });
   };
 
   return (
     <div className="sparta-gate-page" style={{ padding: '0 28px 28px' }}>
       <GateTimeline activeGate="creation" />
 
-      {/* KPI strip */}
+      {/* KPI strip — chiffres réels ou constants, jamais fabriqués (voir IRONBIKE_BRIEF.md §1/§3) */}
       <div className="sparta-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, margin: '20px 0' }}>
         {[
-          { label: '2026 Capacity', value: EVENT.capacity.toLocaleString('en-US'), sub: 'Marathon + Half' },
-          { label: 'Target Applicants', value: EVENT.totalApplicants.toLocaleString('en-US'), sub: `vs ${kpi.historicalAvgApplicants.toLocaleString('en-US')} avg` },
-          { label: 'Avg Revenue / Edition', value: '€' + (kpi.avgRevenuePerEdition / 1000).toFixed(0) + 'k', sub: 'Entry fees + upsells' },
-          { label: 'Natural Return Rate', value: '65%', sub: 'Finishers > next edition' },
+          { label: 'Total Basis', value: total !== undefined ? total.toLocaleString('en-US') : '…', sub: 'Alle Austragungen' },
+          { label: 'Austragung', value: `${EVENT.edition}.`, sub: EVENT.isLastEdition ? 'letzte Austragung' : '' },
+          { label: 'Renndatum', value: new Date(EVENT.raceDate).toLocaleDateString('de-CH'), sub: EVENT.city },
+          { label: 'Kampagnenstart', value: new Date(EVENT.campaignStartDate).toLocaleDateString('de-CH'), sub: 'Ankündigung' },
         ].map(item => (
           <div key={item.label} style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-lg)', padding: '12px 16px' }}>
             <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 4 }}>{item.label}</div>
@@ -165,18 +63,9 @@ export default function CreationPage() {
       <div className="sparta-gate-layout" style={{ display: 'flex', gap: 20 }}>
         {/* Left */}
         <div className="sparta-gate-left" style={{ flex: selectedId ? '0 0 380px' : '1 1 auto', maxWidth: selectedId ? 380 : 700, transition: 'flex-basis 0.2s ease' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div>
-              <span style={{ fontSize: 12, fontWeight: 570, color: 'var(--fg-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Start of Campaign Segments</span>
-              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg-3)' }}>{GATE_TOTAL.toLocaleString('en-US')} total prospects in this gate</span>
-            </div>
-            <button
-              onClick={() => setShowBuilder(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-1)', background: 'var(--bg-1)', color: 'var(--fg-2)', fontSize: 11, cursor: 'pointer' }}
-            >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              Create a segment
-            </button>
+          <div style={{ marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 570, color: 'var(--fg-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ankündigung</span>
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg-3)' }}>Keine Feinsegmentierung — Newsletter 1 und Post 1 richten sich an alle.</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {SEGMENTS.map(seg => (
@@ -184,117 +73,22 @@ export default function CreationPage() {
                 key={seg.id}
                 segment={seg.id}
                 label={seg.label}
-                size={seg.size}
+                size={counts[seg.id] ?? 0}
                 description={seg.description}
                 color={seg.color}
                 colorBg={seg.colorBg}
-                channels={(DEFAULT_CHANNELS[seg.id] ?? ['email']) as string[]}
+                channels={seg.channels}
                 isSelected={selectedId === seg.id}
                 onClick={() => handleSelect(seg.id)}
                 onViewStats={() => handleViewStats(seg)}
-                onEdit={() => handleEditPredefined(seg)}
                 icon={seg.icon}
               />
             ))}
-
-            <AISubSegments
-              key={aiParentId}
-              parentId={aiParentId}
-              parentLabel={aiParentInfo.label}
-              parentAthleteIds={aiParentInfo.athleteIds}
-              parentScaledSize={aiParentInfo.scaledSize}
-              onSelect={handleAISubSelect}
-            />
-
-            {customSegments.map(seg => (
-              <div
-                key={seg.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: selectedId === seg.id ? seg.colorBg : 'var(--bg-1)', border: `1.5px solid ${selectedId === seg.id ? seg.color : 'var(--border-1)'}`, borderRadius: 'var(--radius-lg)', cursor: 'pointer', transition: 'all 0.15s' }}
-                onClick={() => handleSelect(seg.id)}
-              >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, fontWeight: 570, color: 'var(--fg-1)' }}>{seg.name}</span>
-                    <span style={{ fontSize: 13, fontWeight: 570, fontFamily: 'var(--font-mono)', color: selectedId === seg.id ? seg.color : 'var(--fg-1)' }}>
-                      {getScaledCount(seg).toLocaleString('en-US')}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>Custom segment</div>
-                  <div onClick={e => { e.stopPropagation(); handleViewStatsCustom(seg); }} style={{ fontSize: 12, fontWeight: 570, color: 'var(--primary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                    View statistics <span style={{ fontSize: 13 }}>→</span>
-                  </div>
-                </div>
-                <button
-                  onClick={e => { e.stopPropagation(); setEditingSegment(seg); setShowBuilder(true); }}
-                  style={{ background: 'var(--bg-2)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--fg-2)', padding: '3px 6px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 9l6-6 2 2-6 6H1.5V9z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M7 3.5l1 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                  Edit
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); setCustomSegments(p => p.filter(s => s.id !== seg.id)); if (selectedId === seg.id) { setSelectedId(null); setChannels([]); } }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-3)', padding: 4, display: 'flex', alignItems: 'center' }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* Historical data */}
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 570, color: 'var(--fg-2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Historical Performance
-            </div>
-            <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-1)' }}>
-                    {['Year', 'Applicants', 'Finishers'].map(h => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--fg-3)', fontWeight: 570, fontSize: 11, letterSpacing: '0.04em' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {HISTORICAL.map((row, i) => (
-                    <tr key={row.year} style={{ borderBottom: i < HISTORICAL.length - 1 ? '1px solid var(--border-1)' : 'none', background: i % 2 === 0 ? 'transparent' : 'var(--bg-2)' }}>
-                      <td style={{ padding: '7px 12px', fontFamily: 'var(--font-mono)', color: 'var(--fg-1)', fontWeight: 570 }}>{row.year}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>{row.applicants.toLocaleString('en-US')}</td>
-                      <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>{row.finishers.toLocaleString('en-US')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
 
         {/* Right: campaign panel */}
-        {selectedCustom ? (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-xl)', padding: '20px' }}>
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: selectedCustom.colorBg, color: selectedCustom.color, fontSize: 10, fontWeight: 570, letterSpacing: '0.06em' }}>CUSTOM</span>
-                  <h3 style={{ fontSize: 15, fontWeight: 570, margin: 0 }}>{selectedCustom.name}</h3>
-                  <span style={{ fontSize: 13, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
-                    {getScaledCount(selectedCustom).toLocaleString('en-US')} athletes
-                  </span>
-                </div>
-                {selectedCustom.objective && <p style={{ margin: 0, fontSize: 12, color: 'var(--fg-3)' }}>{selectedCustom.objective}</p>}
-              </div>
-              <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
-              <div style={{ marginBottom: 20 }}>
-                <ChannelSelector available={['email', 'sms', 'push', 'instagram']} selected={channels} onChange={setChannels} rationale={{}} />
-              </div>
-              <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
-              <CampaignGenerator gate="gate0" segment="custom_segment" channels={channels} segmentDescription={buildSegmentDescription(selectedCustom)} gateLabel="Start of Campaign" segmentName={selectedCustom.name} segmentColor={selectedCustom.color} segmentColorBg={selectedCustom.colorBg} />
-            </div>
-          </div>
-        ) : selected ? (
+        {selected ? (
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-xl)', padding: '20px' }}>
               <div style={{ marginBottom: 20 }}>
@@ -302,7 +96,7 @@ export default function CreationPage() {
                   <span style={{ fontSize: 20 }}>{selected.icon}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 570, margin: 0 }}>{selected.label}</h3>
                   <span style={{ fontSize: 13, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
-                    {selected.size.toLocaleString('en-US')} athletes
+                    {(counts[selected.id] ?? 0).toLocaleString('en-US')} participants
                   </span>
                 </div>
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--fg-3)' }}>{selected.objective}</p>
@@ -310,14 +104,23 @@ export default function CreationPage() {
               <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
               <div style={{ marginBottom: 20 }}>
                 <ChannelSelector
-                  available={(DEFAULT_CHANNELS[selected.id] ?? ['email']) as Channel[]}
+                  available={selected.channels}
                   selected={channels}
                   onChange={setChannels}
                   rationale={selected.rationale}
                 />
               </div>
               <div style={{ borderBottom: '1px solid var(--border-1)', marginBottom: 20 }} />
-              <CampaignGenerator gate="gate0" segment={selected.id} channels={channels} gateLabel="Start of Campaign" segmentName={selected.label} segmentColor={selected.color} segmentColorBg={selected.colorBg} />
+              <CampaignGenerator
+                gate="gate0"
+                segment={selected.id}
+                channels={channels}
+                segmentSize={counts[selected.id] ?? 0}
+                gateLabel="Ankündigung"
+                segmentName={selected.label}
+                segmentColor={selected.color}
+                segmentColorBg={selected.colorBg}
+              />
             </div>
           </div>
         ) : (
@@ -328,34 +131,11 @@ export default function CreationPage() {
               <path d="M8 18h24" stroke="currentColor" strokeWidth="2"/>
             </svg>
             <p style={{ fontSize: 13, textAlign: 'center', maxWidth: 240, margin: 0 }}>
-              Select a pre-ballot segment to generate your acquisition campaign
+              Select the segment to generate the announcement campaign
             </p>
           </div>
         )}
       </div>
-
-      {(showBuilder || editingSegment) && (
-        <SegmentBuilder
-          existingCount={customSegments.length}
-          gateTotal={GATE_TOTAL}
-          segmentSizes={sizes}
-          gateSegments={GATE_SEGMENTS}
-          athleteSegmentField={SEGMENT_FIELD}
-          initialSegment={editingSegment ?? undefined}
-          onClose={() => { setShowBuilder(false); setEditingSegment(null); }}
-          onSave={seg => {
-            if (editingSegment) {
-              setCustomSegments(p => p.map(s => s.id === seg.id ? seg : s));
-            } else {
-              setCustomSegments(p => [...p, seg]);
-            }
-            setShowBuilder(false);
-            setEditingSegment(null);
-            setSelectedId(seg.id);
-            setChannels(['email']);
-          }}
-        />
-      )}
 
       {statsDrawer && (
         <SegmentStatsDrawer
@@ -365,8 +145,7 @@ export default function CreationPage() {
           segmentDescription={statsDrawer.description}
           segmentColor={statsDrawer.color}
           criteria={statsDrawer.criteria}
-          athleteIds={statsDrawer.athleteIds}
-          scaledSize={statsDrawer.scaledSize}
+          filters={SEGMENTS.find(s => s.id === statsDrawer.segmentId)?.filters ?? []}
           onGenerateCampaign={() => { handleSelect(statsDrawer.segmentId); setStatsDrawer(null); }}
         />
       )}

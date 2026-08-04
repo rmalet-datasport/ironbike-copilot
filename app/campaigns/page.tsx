@@ -12,37 +12,34 @@ const GATE_COLORS: Record<string, { color: string; bg: string }> = {
 };
 
 const CHANNEL_COLORS: Record<string, { color: string; bg: string }> = {
-  email:     { color: '#2563EB', bg: '#EFF6FF' },
-  sms:       { color: '#16A34A', bg: '#F0FDF4' },
-  push:      { color: '#7C3AED', bg: '#F5F3FF' },
-  instagram: { color: '#EA580C', bg: '#FFF7ED' },
+  feed_post:  { color: '#2563EB', bg: '#EFF6FF' },
+  story:      { color: '#7C3AED', bg: '#F5F3FF' },
+  newsletter: { color: '#16A34A', bg: '#F0FDF4' },
+};
+
+const CHANNEL_LABELS: Record<string, string> = {
+  feed_post: 'Feed Post',
+  story: 'Story',
+  newsletter: 'Newsletter',
 };
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
-  email: (
+  feed_post: (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <rect x="1.5" y="1.5" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+      <rect x="3" y="3" width="6" height="3.5" rx="0.5" fill="currentColor" opacity="0.25"/>
+    </svg>
+  ),
+  story: (
+    <svg width="13" height="11" viewBox="0 0 13 11" fill="none">
+      <rect x="1.5" y="0.5" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <rect x="3" y="2" width="7" height="4" rx="0.5" fill="currentColor" opacity="0.3"/>
+    </svg>
+  ),
+  newsletter: (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
       <rect x="1" y="2.5" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
       <path d="M1 5l5.5 3L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  ),
-  sms: (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-      <rect x="1" y="1.5" width="11" height="7.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M3.5 11.5l2-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  ),
-  push: (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-      <path d="M6.5 1v1M10 2.5l-.7.7M3 2.5l.7.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <path d="M2 8.5h9l-1.1-4.5a3 3 0 00-6.8 0L2 8.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M5 8.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/>
-    </svg>
-  ),
-  instagram: (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-      <rect x="1.5" y="1.5" width="10" height="10" rx="3" stroke="currentColor" strokeWidth="1.3"/>
-      <circle cx="6.5" cy="6.5" r="2.2" stroke="currentColor" strokeWidth="1.3"/>
-      <circle cx="9.8" cy="3.2" r="0.8" fill="currentColor"/>
     </svg>
   ),
 };
@@ -52,7 +49,7 @@ function formatTime(ts: number): string {
 }
 
 function getPreview(asset: SavedAsset['asset']): string {
-  return asset.subject ?? asset.title ?? asset.caption ?? asset.body ?? '';
+  return asset.subject ?? asset.copy ?? asset.sentence ?? asset.body ?? '';
 }
 
 export default function CampaignsPage() {
@@ -128,8 +125,8 @@ export default function CampaignsPage() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: chStyle.color }}>
                     {CHANNEL_ICONS[item.channel]}
-                    <span style={{ fontSize: 12, fontWeight: 570, textTransform: 'capitalize' }}>
-                      {item.channel}
+                    <span style={{ fontSize: 12, fontWeight: 570 }}>
+                      {CHANNEL_LABELS[item.channel] ?? item.channel}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -171,20 +168,11 @@ export default function CampaignsPage() {
                     </span>
                   </div>
 
-                  {/* Image thumbnail */}
-                  {item.imageUrl && (
-                    <img
-                      src={item.imageUrl}
-                      alt="Visual"
-                      style={{ width: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-1)', objectFit: 'cover', maxHeight: 120, display: 'block' }}
-                    />
-                  )}
-
                   {/* Content preview */}
                   {preview && (
                     <div style={{
                       fontSize: 12, color: 'var(--fg-1)', lineHeight: 1.5,
-                      display: '-webkit-box', WebkitLineClamp: item.imageUrl ? 2 : 3,
+                      display: '-webkit-box', WebkitLineClamp: 3,
                       WebkitBoxOrient: 'vertical', overflow: 'hidden',
                     }}>
                       {preview}
@@ -230,7 +218,7 @@ export default function CampaignsPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: (CHANNEL_COLORS[selected.channel] ?? { color: '#6B7280' }).color }}>
                   {CHANNEL_ICONS[selected.channel]}
-                  <span style={{ fontSize: 14, fontWeight: 570, textTransform: 'capitalize' }}>{selected.channel}</span>
+                  <span style={{ fontSize: 14, fontWeight: 570 }}>{CHANNEL_LABELS[selected.channel] ?? selected.channel}</span>
                 </div>
               </div>
               <button
@@ -247,10 +235,9 @@ export default function CampaignsPage() {
             <div style={{ padding: '20px' }}>
               <AssetCard
                 asset={selected.asset}
-                savedImageUrl={selected.imageUrl}
                 isSaved={modalSaved}
-                onSave={(imageUrl, editedAsset) => {
-                  updateAsset(selected.id, editedAsset ?? selected.asset, imageUrl);
+                onSave={(editedAsset) => {
+                  updateAsset(selected.id, editedAsset ?? selected.asset);
                   setModalSaved(true);
                 }}
               />

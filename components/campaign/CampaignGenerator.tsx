@@ -4,15 +4,21 @@ import { useState } from 'react';
 import AssetCard from './AssetCard';
 import { useCampaignHistory } from '@/lib/context/CampaignHistoryContext';
 import { useBrandHistory } from '@/lib/context/BrandHistoryContext';
-import { RACES, type Race } from '@/lib/constants';
+import { CATEGORIES, SIBLING_EVENTS, type Category, type SiblingEvent } from '@/lib/constants';
 
 interface Asset {
   channel: string;
+  copy?: string;
+  cta?: string;
+  visualDirection?: string;
+  editionNumber?: string;
+  dataPoint?: string;
+  sentence?: string;
+  stickerLink?: string;
   subject?: string;
-  title?: string;
+  preheader?: string;
   body?: string;
-  caption?: string;
-  hashtags?: string;
+  personalizationFields?: string[];
   meta?: string;
 }
 
@@ -20,11 +26,13 @@ interface CampaignGeneratorProps {
   gate: string;
   segment: string;
   channels: string[];
+  segmentSize?: number;
   segmentDescription?: string;
   segmentName?: string;
   segmentColor?: string;
   segmentColorBg?: string;
   gateLabel?: string;
+  promoMode?: 'categories' | 'siblingEvents';
 }
 
 function LoadingDots() {
@@ -53,14 +61,15 @@ function LoadingDots() {
   );
 }
 
-export default function CampaignGenerator({ gate, segment, channels, segmentDescription, segmentName, segmentColor, segmentColorBg, gateLabel }: CampaignGeneratorProps) {
+export default function CampaignGenerator({ gate, segment, channels, segmentSize, segmentDescription, segmentName, segmentColor, segmentColorBg, gateLabel, promoMode = 'categories' }: CampaignGeneratorProps) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [status, setStatus] = useState<'idle' | 'generating' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [customInstructions, setCustomInstructions] = useState('');
   const [regenChannel, setRegenChannel] = useState<string | null>(null);
   const [savedChannels, setSavedChannels] = useState<Set<string>>(new Set());
-  const [selectedRaces, setSelectedRaces] = useState<Race[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [selectedSiblingEvents, setSelectedSiblingEvents] = useState<SiblingEvent[]>([]);
   const { saveAsset } = useCampaignHistory();
   const { getRelevantExamples } = useBrandHistory();
 
@@ -84,8 +93,10 @@ export default function CampaignGenerator({ gate, segment, channels, segmentDesc
           customInstructions: opts?.customPrompt ?? customInstructions,
           channelToRegenerate: opts?.channelToRegenerate,
           segmentDescription,
+          segmentSize,
           historicalExamples,
-          selectedRaces,
+          selectedCategories,
+          selectedSiblingEvents,
         }),
       });
 
@@ -184,66 +195,108 @@ export default function CampaignGenerator({ gate, segment, channels, segmentDesc
         );
       })()}
 
-      {/* Race selector */}
-      {status !== 'generating' && (
+      {/* Promotion selector — categories (gate 0-2) or sibling events cross-sell (gate 3) */}
+      {status !== 'generating' && promoMode === 'categories' && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 570, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            Promote events
+            Promote categories
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {(['main', 'satellite'] as const).map(type => (
-              <div key={type}>
-                <div style={{ fontSize: 10, color: 'var(--fg-3)', marginBottom: 4, letterSpacing: '0.04em' }}>
-                  {type === 'main' ? 'Main events' : 'Satellite events'}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {RACES.filter(r => r.type === type).map(race => {
-                    const checked = selectedRaces.some(r => r.id === race.id);
-                    return (
-                      <button
-                        key={race.id}
-                        onClick={() => setSelectedRaces(prev =>
-                          checked ? prev.filter(r => r.id !== race.id) : [...prev, race]
-                        )}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          padding: '5px 10px',
-                          borderRadius: 'var(--radius-md)',
-                          border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--border-1)'}`,
-                          background: checked ? 'color-mix(in srgb, var(--primary) 8%, var(--bg-1))' : 'var(--bg-1)',
-                          color: checked ? 'var(--primary)' : 'var(--fg-2)',
-                          fontSize: 12,
-                          fontWeight: checked ? 570 : 400,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <span style={{
-                          width: 14, height: 14, borderRadius: 3,
-                          border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--fg-3)'}`,
-                          background: checked ? 'var(--primary)' : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          flexShrink: 0, transition: 'all 0.15s ease',
-                        }}>
-                          {checked && (
-                            <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                              <path d="M1.5 4.5l2 2 4-4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </span>
-                        {race.name} <span style={{ opacity: 0.7 }}>{race.distance}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CATEGORIES.map(cat => {
+              const checked = selectedCategories.some(c => c.id === cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategories(prev =>
+                    checked ? prev.filter(c => c.id !== cat.id) : [...prev, cat]
+                  )}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--border-1)'}`,
+                    background: checked ? 'color-mix(in srgb, var(--primary) 8%, var(--bg-1))' : 'var(--bg-1)',
+                    color: checked ? 'var(--primary)' : 'var(--fg-2)',
+                    fontSize: 12,
+                    fontWeight: checked ? 570 : 400,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span style={{
+                    width: 14, height: 14, borderRadius: 3,
+                    border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--fg-3)'}`,
+                    background: checked ? 'var(--primary)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, transition: 'all 0.15s ease',
+                  }}>
+                    {checked && (
+                      <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                        <path d="M1.5 4.5l2 2 4-4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
+                  {cat.label}
+                </button>
+              );
+            })}
           </div>
-          {selectedRaces.length > 1 && (
+          {selectedCategories.length > 1 && (
             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg-3)', fontStyle: 'italic' }}>
-              Multi-event selection — campaign will use a broader message covering all selected races.
+              Multi-category selection — campaign will use a broader message covering all selected categories.
             </div>
           )}
+        </div>
+      )}
+
+      {status !== 'generating' && promoMode === 'siblingEvents' && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 570, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Cross-sell — other Bike Marathon Classics
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {SIBLING_EVENTS.map(ev => {
+              const checked = selectedSiblingEvents.some(e => e.id === ev.id);
+              return (
+                <button
+                  key={ev.id}
+                  onClick={() => setSelectedSiblingEvents(prev =>
+                    checked ? prev.filter(e => e.id !== ev.id) : [...prev, ev]
+                  )}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--border-1)'}`,
+                    background: checked ? 'color-mix(in srgb, var(--primary) 8%, var(--bg-1))' : 'var(--bg-1)',
+                    color: checked ? 'var(--primary)' : 'var(--fg-2)',
+                    fontSize: 12,
+                    fontWeight: checked ? 570 : 400,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span style={{
+                    width: 14, height: 14, borderRadius: 3,
+                    border: `1.5px solid ${checked ? 'var(--primary)' : 'var(--fg-3)'}`,
+                    background: checked ? 'var(--primary)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, transition: 'all 0.15s ease',
+                  }}>
+                    {checked && (
+                      <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                        <path d="M1.5 4.5l2 2 4-4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </span>
+                  {ev.name}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg-3)', fontStyle: 'italic' }}>
+            Nothing checked by default — cross-sell is optional (decision D of the campaign concept).
+          </div>
         </div>
       )}
 
@@ -316,7 +369,7 @@ export default function CampaignGenerator({ gate, segment, channels, segmentDesc
               onRegenerate={handleRegenerate}
               isRegenerating={regenChannel === asset.channel}
               isSaved={savedChannels.has(asset.channel)}
-              onSave={(imageUrl?: string, editedAsset?: Asset) => {
+              onSave={(editedAsset?: Asset) => {
                 saveAsset({
                   gate,
                   gateLabel: gateLabel ?? gate,
@@ -326,7 +379,6 @@ export default function CampaignGenerator({ gate, segment, channels, segmentDesc
                   segmentColorBg: segmentColorBg ?? '#F9FAFB',
                   channel: asset.channel,
                   asset: editedAsset ?? asset,
-                  imageUrl,
                 });
                 setSavedChannels(prev => new Set([...prev, asset.channel]));
               }}

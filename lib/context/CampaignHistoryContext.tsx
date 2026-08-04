@@ -4,11 +4,17 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 
 export interface CampaignAsset {
   channel: string;
+  copy?: string;
+  cta?: string;
+  visualDirection?: string;
+  editionNumber?: string;
+  dataPoint?: string;
+  sentence?: string;
+  stickerLink?: string;
   subject?: string;
-  title?: string;
+  preheader?: string;
   body?: string;
-  caption?: string;
-  hashtags?: string;
+  personalizationFields?: string[];
   meta?: string;
 }
 
@@ -22,7 +28,6 @@ export interface SavedAsset {
   segmentColorBg: string;
   channel: string;
   asset: CampaignAsset;
-  imageUrl?: string;
   savedAt: number;
 }
 
@@ -30,7 +35,7 @@ interface ContextValue {
   savedAssets: SavedAsset[];
   saveAsset: (a: Omit<SavedAsset, 'id' | 'savedAt'>) => void;
   removeAsset: (id: string) => void;
-  updateAsset: (id: string, edited: CampaignAsset, imageUrl?: string) => void;
+  updateAsset: (id: string, edited: CampaignAsset) => void;
 }
 
 const STORAGE_KEY = 'sparta_saved_assets';
@@ -73,10 +78,10 @@ export function CampaignHistoryProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateAsset = (id: string, edited: CampaignAsset, imageUrl?: string) => {
+  const updateAsset = (id: string, edited: CampaignAsset) => {
     setSavedAssets(prev => {
       const next = prev.map(a =>
-        a.id === id ? { ...a, asset: edited, imageUrl: imageUrl ?? a.imageUrl } : a
+        a.id === id ? { ...a, asset: edited } : a
       );
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;

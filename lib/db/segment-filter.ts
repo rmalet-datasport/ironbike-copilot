@@ -1,65 +1,47 @@
-import { athletes } from './athletes'
+// SERVEUR UNIQUEMENT — importe participants.ts (dataset réel). Ne jamais importer ce module
+// depuis un composant 'use client' ; seules les routes app/api/participants/* doivent l'utiliser.
+import { getParticipants } from './participants'
 import type { FilterCondition } from '../types/segments'
-import type { Athlete } from '../types/athlete'
+import type { Participant } from '../types/participant'
 
-const INTERNATIONAL_NATIONALITIES = ['DE', 'UK', 'NL', 'NO']
-
-function getGate0Segment(a: Athlete): string {
-  if (a.externalProspect) return 'external_prospects'
-  if (INTERNATIONAL_NATIONALITIES.includes(a.nationality)) return 'international_targets'
-  if (a.isReturningAthlete && a.totalEditionsRaced > 0) return 'past_finishers'
-  return 'past_refused'
+function matchesAllFilters(p: Participant, filters: FilterCondition[]): boolean {
+  return filters.every(f => {
+    const v = f.value
+    switch (f.field) {
+      case 'gender':
+        return p.gender === v
+      case 'age_min':
+        return v !== '' && p.age !== undefined && p.age >= parseInt(v)
+      case 'age_max':
+        return v !== '' && p.age !== undefined && p.age <= parseInt(v)
+      case 'nationality':
+        return p.nationality === v
+      case 'geoZone':
+        return v.split(',').includes(p.geoZone)
+      case 'hasEmail':
+        return p.hasEmail === (v === 'true')
+      case 'registrationStatus2026':
+        return p.registrationStatus2026 === v
+      default:
+        return true
+    }
+  })
 }
 
-export function filterAthletes(
+// scopeFilterGroups : union (OR) de groupes de filtres (ex: les segments prédéfinis
+// sélectionnés comme scope) — chaque groupe est évalué en AND, les groupes entre eux en OR.
+// filters : appliqués en AND par-dessus le scope. Absence de scope = tous les participants.
+export function filterParticipants(
   filters: FilterCondition[],
-  baseSegmentIds?: string[],
-  segmentField?: string,
-  baseAthleteIds?: Set<string>
-): Athlete[] {
-  let pool: Athlete[] = athletes
+  scopeFilterGroups?: FilterCondition[][]
+): Participant[] {
+  let pool: Participant[] = getParticipants()
 
-  if (baseAthleteIds && baseAthleteIds.size > 0) {
-    pool = pool.filter(a => baseAthleteIds!.has(a.id))
-  } else if (baseSegmentIds && baseSegmentIds.length > 0 && segmentField) {
-    if (segmentField === 'gate0Segment') {
-      pool = pool.filter(a => baseSegmentIds.includes(getGate0Segment(a)))
-    } else {
-      pool = pool.filter(a => baseSegmentIds.includes((a as any)[segmentField] ?? ''))
-    }
+  if (scopeFilterGroups && scopeFilterGroups.length > 0) {
+    pool = pool.filter(p => scopeFilterGroups.some(group => matchesAllFilters(p, group)))
   }
 
   if (filters.length === 0) return pool
 
-  return pool.filter(a =>
-    filters.every(f => {
-      const v = f.value
-      switch (f.field) {
-        case 'gender':
-          return a.gender === v
-        case 'age_min':
-          return v !== '' && a.age >= parseInt(v)
-        case 'age_max':
-          return v !== '' && a.age <= parseInt(v)
-        case 'nationality':
-          return a.nationality === v
-        case 'isReturningAthlete':
-          return a.isReturningAthlete === (v === 'true')
-        case 'total_editions_min':
-          return v !== '' && a.totalEditionsRaced >= parseInt(v)
-        case 'total_editions_max':
-          return v !== '' && a.totalEditionsRaced <= parseInt(v)
-        case 'engagement_min':
-          return v !== '' && a.engagement.score >= parseInt(v)
-        case 'city_contains':
-          return v !== '' && a.city.toLowerCase().includes(v.toLowerCase())
-        case 'distance':
-          return a.distance === v
-        case 'hasInsurance':
-          return (a.upsellsPurchased?.includes('cancellation_insurance') ?? false) === (v === 'true')
-        default:
-          return true
-      }
-    })
-  )
+  return pool.filter(p => matchesAllFilters(p, filters))
 }

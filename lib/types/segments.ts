@@ -3,13 +3,9 @@ export type FilterField =
   | 'age_min'
   | 'age_max'
   | 'nationality'
-  | 'isReturningAthlete'
-  | 'total_editions_min'
-  | 'total_editions_max'
-  | 'engagement_min'
-  | 'city_contains'
-  | 'distance'
-  | 'hasInsurance'
+  | 'geoZone'
+  | 'hasEmail'
+  | 'registrationStatus2026'
 
 export interface FilterCondition {
   id: string
@@ -23,7 +19,7 @@ export interface CustomSegment {
   color: string
   colorBg: string
   filters: FilterCondition[]
-  baseSegmentIds: string[]    // empty = all athletes in the gate
+  baseSegmentIds: string[]    // empty = all participants in the gate
   baseSegmentLabels: string[] // human-readable labels for display
   objective?: string          // free-text context for AI generation
 }
@@ -33,46 +29,41 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   age_min: 'Min age',
   age_max: 'Max age',
   nationality: 'Nationality',
-  isReturningAthlete: 'Returning',
-  total_editions_min: 'Min editions',
-  total_editions_max: 'Max editions',
-  engagement_min: 'Min engagement',
-  city_contains: 'City',
-  distance: 'Distance',
-  hasInsurance: 'Cancellation insurance',
+  geoZone: 'Geo zone',
+  hasEmail: 'Reachable by email',
+  registrationStatus2026: '2026 registration status',
 }
 
 export const FILTER_VALUE_OPTIONS: Partial<Record<FilterField, { value: string; label: string }[]>> = {
   gender: [
     { value: 'M', label: 'Male' },
     { value: 'F', label: 'Female' },
-    { value: 'X', label: 'Other' },
+    { value: 'unknown', label: 'Unknown' },
   ],
   nationality: [
-    { value: 'DK', label: 'Denmark' },
-    { value: 'SE', label: 'Sweden' },
-    { value: 'DE', label: 'Germany' },
-    { value: 'UK', label: 'United Kingdom' },
-    { value: 'NL', label: 'Netherlands' },
-    { value: 'NO', label: 'Norway' },
-    { value: 'FR', label: 'France' },
-    { value: 'US', label: 'United States' },
-    { value: 'IT', label: 'Italy' },
-    { value: 'CH', label: 'Switzerland' },
-    { value: 'PL', label: 'Poland' },
-    { value: 'BE', label: 'Belgium' },
+    { value: 'SUI', label: 'Switzerland' },
+    { value: 'GER', label: 'Germany' },
+    { value: 'AUT', label: 'Austria' },
+    { value: 'ITA', label: 'Italy' },
+    { value: 'FRA', label: 'France' },
+    { value: 'unknown', label: 'Unknown' },
   ],
-  isReturningAthlete: [
+  geoZone: [
+    { value: 'kernradius', label: 'Kernradius (~45 min from Einsiedeln)' },
+    { value: 'innerschweiz', label: 'Innerschweiz (Luzern area)' },
+    { value: 'reste_suisse', label: 'Rest of Switzerland' },
+    { value: 'innerschweiz,reste_suisse', label: 'Switzerland outside Kernradius' },
+    { value: 'etranger', label: 'Abroad' },
+    { value: 'unknown', label: 'Unknown' },
+  ],
+  hasEmail: [
     { value: 'true', label: 'Yes' },
     { value: 'false', label: 'No' },
   ],
-  hasInsurance: [
-    { value: 'true', label: 'Yes' },
-    { value: 'false', label: 'No' },
-  ],
-  distance: [
-    { value: 'Marathon 42K', label: 'Marathon 42K' },
-    { value: 'Half Marathon 21K', label: 'Half Marathon 21K' },
+  registrationStatus2026: [
+    { value: 'registered', label: 'Registered' },
+    { value: 'not_registered', label: 'Not registered' },
+    { value: 'unknown', label: 'Unknown' },
   ],
 }
 
@@ -104,7 +95,7 @@ export function buildSegmentDescription(segment: CustomSegment): string {
   }
 
   if (parts.length === 0) {
-    return `Custom segment: "${segment.name}" (all athletes, no filters)`
+    return `Custom segment: "${segment.name}" (all participants, no filters)`
   }
 
   return `Custom segment: "${segment.name}"\n${parts.join('\n')}`

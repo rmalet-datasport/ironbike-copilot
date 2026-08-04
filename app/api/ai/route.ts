@@ -1,25 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest } from 'next/server';
 import { SYSTEM_PROMPTS, buildUserPrompt, buildRegeneratePrompt } from '@/lib/ai/prompts';
-import { SEGMENT_SIZES } from '@/lib/constants';
 import { isRateLimited } from '@/lib/rate-limit';
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const VALID_CHANNELS = new Set(['email', 'sms', 'push', 'instagram', 'linkedin', 'facebook', 'partner'])
+const VALID_CHANNELS = new Set(['feed_post', 'story', 'newsletter'])
 
 function buildDryRunAsset(channel: string) {
   switch (channel) {
-    case 'email':     return { channel, subject: '[DRY RUN] Test subject', body: '[DRY RUN] Test body', meta: 'dry-run fixture' }
-    case 'sms':       return { channel, body: '[DRY RUN] Test SMS body', meta: 'dry-run fixture' }
-    case 'push':      return { channel, title: '[DRY RUN] Test push title', body: '[DRY RUN] Test push body', meta: 'dry-run fixture' }
-    case 'instagram': return { channel, caption: '[DRY RUN] Test caption', hashtags: '#test #dryrun', meta: 'dry-run fixture' }
-    case 'linkedin':  return { channel, title: '[DRY RUN] LinkedIn headline', body: '[DRY RUN] LinkedIn post body', hashtags: '#test #dryrun', meta: 'dry-run fixture' }
-    case 'facebook':  return { channel, title: '[DRY RUN] Facebook hook', body: '[DRY RUN] Facebook post body', hashtags: '#test #dryrun', meta: 'dry-run fixture' }
-    case 'partner':   return { channel, title: '[DRY RUN] Campaign name', caption: '[DRY RUN] Flyer tagline', body: '[DRY RUN] Ambassador briefing', utmCampaign: 'dryrun_campaign', distributionPoints: 'Running store A, Gym B, Parkrun C', meta: 'dry-run fixture' }
-    default:          return { channel, body: '[DRY RUN]', meta: 'dry-run fixture' }
+    case 'feed_post':  return { channel, copy: '[DRY RUN] Test copy', cta: '[DRY RUN] Jetzt anmelden', visualDirection: 'typo', meta: 'dry-run fixture' }
+    case 'story':      return { channel, editionNumber: '[DRY RUN] Tag 1', dataPoint: '[DRY RUN] 30 Jahre', sentence: '[DRY RUN] Test sentence', meta: 'dry-run fixture' }
+    case 'newsletter': return { channel, subject: '[DRY RUN] Test subject', preheader: '[DRY RUN] Test preheader', body: '[DRY RUN] Test body', meta: 'dry-run fixture' }
+    default:           return { channel, meta: 'dry-run fixture' }
   }
 }
 
@@ -33,7 +28,10 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = await req.json();
-    const { gate, segment, channels, customInstructions, channelToRegenerate, segmentDescription, historicalExamples, selectedRaces, _dryRun } = body;
+    const {
+      gate, segment, channels, customInstructions, channelToRegenerate, segmentDescription,
+      segmentSize, historicalExamples, selectedCategories, selectedSiblingEvents, _dryRun,
+    } = body;
 
     const systemPrompt = SYSTEM_PROMPTS[gate as string]?.[segment as string];
 
@@ -60,17 +58,16 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const segmentSize = (SEGMENT_SIZES as Record<string, Record<string, number>>)[gate as string]?.[segment as string] ?? 1000;
-
     const userPrompt = channelToRegenerate
-      ? buildRegeneratePrompt(channelToRegenerate, customInstructions ?? '', historicalExamples ?? [], selectedRaces ?? [])
+      ? buildRegeneratePrompt(channelToRegenerate, customInstructions ?? '', historicalExamples ?? [], selectedCategories ?? [], selectedSiblingEvents ?? [])
       : buildUserPrompt({
           channels: channels ?? [],
           customInstructions,
           segmentDescription,
-          segmentStats: { size: segmentSize },
+          segmentSize,
           historicalExamples: historicalExamples ?? [],
-          selectedRaces: selectedRaces ?? [],
+          selectedCategories: selectedCategories ?? [],
+          selectedSiblingEvents: selectedSiblingEvents ?? [],
         });
 
     const message = await client.messages.create({
