@@ -7,13 +7,15 @@ Race Einsiedeln (BikeSide) — la **30ᵉ et dernière édition**, le 27 septemb
 un fork dédié du POC Sparta Co-Pilot (Copenhagen Marathon) : l'architecture générale est
 reprise, mais les données, le modèle, les segments et les prompts sont entièrement reconfigurés
 pour ce client et cet événement. Voir `IRONBIKE_BRIEF.md` pour le détail complet de l'adaptation
-et les décisions prises.
+et les décisions prises, `STATUS.md` pour l'état actuel du projet, et `docs/DEPLOYMENT.md` pour
+le déploiement Vercel.
 
 **Contrairement à Sparta, la donnée est réelle** (18 607 personnes ayant déjà participé,
 export `data/participants.csv`, gitignoré) — pas une DB fictive générée pour la démo. Toutes
 les règles de confidentialité ci-dessous en découlent directement.
 
-Stack : Next.js 15 (App Router), TypeScript, Tailwind CSS, Anthropic API, SheetJS (xlsx).
+Stack : Next.js 15 (App Router), TypeScript, Tailwind CSS, Anthropic API, ExcelJS (xlsx),
+Vercel Blob (fallback données en prod, voir `docs/DEPLOYMENT.md`).
 
 ---
 
@@ -35,19 +37,24 @@ ironbike-copilot/
 │   │   └── finish/page.tsx              (Gate 3 — Renntag & danach)
 │   └── api/
 │       ├── ai/
-│       │   └── route.ts                 (génération campagne)
+│       │   └── route.ts                 (génération campagne — tool-use Anthropic)
 │       └── participants/
 │           ├── count/route.ts           (compte réel filtré)
-│           └── stats/route.ts           (agrégats structurés filtrés)
+│           ├── stats/route.ts           (agrégats structurés filtrés)
+│           ├── export/route.ts          (export xlsx destinataires — format rapidmail)
+│           └── primo-inscrits/route.ts  (compte inscrits 2026 jamais vus dans l'historique)
 ├── lib/
 │   ├── db/
-│   │   ├── participants.ts              (SERVEUR UNIQUEMENT — parsing/nettoyage CSV réel)
+│   │   ├── participants.ts              (SERVEUR UNIQUEMENT — parsing CSV réel + fallback Blob)
 │   │   ├── segment-filter.ts            (SERVEUR UNIQUEMENT — filterParticipants)
-│   │   └── segment-stats.ts             (SERVEUR UNIQUEMENT — computeStats)
+│   │   ├── segment-stats.ts             (SERVEUR UNIQUEMENT — computeStats)
+│   │   └── segment-export.ts            (SERVEUR UNIQUEMENT — toRapidmailXlsx)
 │   ├── segments/
 │   │   └── predefined.ts                (métadonnées segments prédéfinis — safe client+serveur)
 │   ├── hooks/
 │   │   └── useParticipantCounts.ts      (client — fetch vers /api/participants/count)
+│   ├── utils/
+│   │   └── exportSegment.ts             (client — déclenche le téléchargement de l'export)
 │   ├── types/
 │   │   ├── participant.ts               (type Participant complet)
 │   │   ├── segments.ts                  (FilterField, FilterCondition, CustomSegment, ...)

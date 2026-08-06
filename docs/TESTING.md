@@ -63,12 +63,20 @@ npm run test:local
 
 ---
 
-## Pas de déploiement serveur pour l'instant
+## Déploiement
 
-Décision (`IRONBIKE_BRIEF.md` §7bis) : chaque collègue lance l'outil en local sur sa machine
-(`npm install && npm run dev`), pas d'instance partagée type `lab.datasport.com`. Le script
-cible donc `http://localhost:3000` par défaut — `BASE_URL` reste disponible si une instance
-hébergée est mise en place plus tard (P1).
+Chaque collègue lance l'outil en local sur sa machine (`npm install && npm run dev`) pour le
+développement quotidien — décision initiale (`IRONBIKE_BRIEF.md` §7bis). Un déploiement Vercel
+existe désormais en plus (voir `docs/DEPLOYMENT.md`) pour partager une URL sans setup local. Le
+script cible `http://localhost:3000` par défaut — `BASE_URL` permet de le pointer vers le
+déploiement Vercel à la place :
+
+```powershell
+$env:BASE_URL = "https://<deployment-url>"; $env:DEMO_PASSWORD = "..."; node scripts/test-routes.mjs
+```
+
+Sur un déploiement Vercel, la protection de déploiement Vercel (différente de `DEMO_PASSWORD`)
+peut bloquer les requêtes directes — voir `docs/DEPLOYMENT.md` pour tester avec `vercel curl`.
 
 > **Note** : le test [10] (rate limiting) s'exécute en dernier car il épuise intentionnellement
 > le quota — les tests dry-run [8] et l'appel Anthropic réel [9] doivent tourner avant.

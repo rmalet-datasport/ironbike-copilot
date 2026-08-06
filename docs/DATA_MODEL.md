@@ -83,6 +83,14 @@ exclure une liste réelle sans repasser par l'export onreg.
 Le point d'entrée d'upload (écran de dépôt du fichier) reste **P1** — le fichier se dépose
 pour l'instant directement dans `data/`, comme `participants.csv`.
 
+### Fallback Vercel Blob (déploiement)
+
+`data/` est gitignoré : sur Vercel, ces fichiers n'existent pas dans le déploiement.
+`readLocalOrBlob()` dans `lib/db/participants.ts` lit `data/participants.csv` normalement en
+local, et bascule sur un store Vercel Blob privé (`participants.csv` / `registered-2026.xlsx`)
+quand le fichier local est absent. Voir `docs/DEPLOYMENT.md` pour la configuration complète et
+comment rafraîchir les données Blob après une mise à jour locale.
+
 ---
 
 ## Profil participant (`lib/types/participant.ts`)
