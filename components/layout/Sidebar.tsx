@@ -6,12 +6,13 @@ import { useEffect } from 'react';
 import { useCampaignHistory } from '@/lib/context/CampaignHistoryContext';
 import { useBrandHistory } from '@/lib/context/BrandHistoryContext';
 import { useSidebar } from '@/lib/context/SidebarContext';
+import { EVENT } from '@/lib/constants';
 
 const GATES = [
   {
     id: 'creation',
-    label: 'Start of Campaign',
-    sublabel: 'Journey 0',
+    label: 'Ankündigung',
+    sublabel: 'Phase 0',
     href: '/gate/creation',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -24,8 +25,8 @@ const GATES = [
   },
   {
     id: 'registration',
-    label: 'Ballot Opening',
-    sublabel: 'Journey 1',
+    label: 'Anmeldephase',
+    sublabel: 'Phase 1',
     href: '/gate/registration',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -38,8 +39,8 @@ const GATES = [
   },
   {
     id: 'lottery',
-    label: 'Lottery',
-    sublabel: 'Journey 2',
+    label: 'Race Week',
+    sublabel: 'Phase 2',
     href: '/gate/lottery',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -54,8 +55,8 @@ const GATES = [
   },
   {
     id: 'finish',
-    label: 'Post Race',
-    sublabel: 'Journey 3',
+    label: 'Renntag & danach',
+    sublabel: 'Phase 3',
     href: '/gate/finish',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -78,11 +79,11 @@ export default function Sidebar() {
     <>
       {/* Mobile overlay */}
       <div
-        className={`sparta-overlay${isOpen ? ' visible' : ''}`}
+        className={`ironbike-overlay${isOpen ? ' visible' : ''}`}
         onClick={close}
       />
     <aside
-      className={`sparta-sidebar${isOpen ? ' open' : ''}`}
+      className={`ironbike-sidebar${isOpen ? ' open' : ''}`}
       style={{
         width: 224,
         minHeight: '100vh',
@@ -108,7 +109,7 @@ export default function Sidebar() {
           </svg>
           <div>
             <div style={{ color: 'var(--color-white)', fontWeight: 570, fontSize: 14, lineHeight: 1.2 }}>
-              Sparta Co-Pilot
+              Iron Bike Co-Pilot
             </div>
             <div style={{ marginTop: 4 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -131,10 +132,10 @@ export default function Sidebar() {
             Event
           </div>
           <div style={{ color: 'var(--color-white)', fontSize: 12, fontWeight: 570 }}>
-            Copenhagen Marathon
+            {EVENT.name}
           </div>
           <div style={{ color: 'var(--color-grey-500)', fontSize: 11, marginTop: 1 }}>
-            2026 · May 17
+            {new Date(EVENT.raceDate).getFullYear()} · {new Date(EVENT.raceDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </div>
         </div>
       </div>

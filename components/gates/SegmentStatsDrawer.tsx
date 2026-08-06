@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { FilterCondition } from '@/lib/types/segments';
 import type { ParticipantStats } from '@/lib/db/segment-stats';
+import { exportSegmentList, slugifyForFilename } from '@/lib/utils/exportSegment';
 
 interface Criteria { l: string; v: string }
 
@@ -24,6 +25,21 @@ export default function SegmentStatsDrawer({
 }: Props) {
   const [stats, setStats] = useState<ParticipantStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const filename = `${slugifyForFilename(segmentName)}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      await exportSegmentList(filters, scopeFilterGroups, filename);
+    } catch {
+      setExportError('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -60,7 +76,7 @@ export default function SegmentStatsDrawer({
 
       {/* Drawer */}
       <aside
-        className="sparta-stats-drawer"
+        className="ironbike-stats-drawer"
         style={{
           position: 'fixed', top: 0, right: 0,
           height: '100vh', width: 540,
@@ -73,7 +89,7 @@ export default function SegmentStatsDrawer({
         }}
       >
         {/* Header */}
-        <div className="sparta-stats-drawer-header" style={{ padding: '24px 28px 18px', borderBottom: '1px solid var(--border-1)', flexShrink: 0 }}>
+        <div className="ironbike-stats-drawer-header" style={{ padding: '24px 28px 18px', borderBottom: '1px solid var(--border-1)', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
               <div style={{
@@ -112,7 +128,7 @@ export default function SegmentStatsDrawer({
         </div>
 
         {/* Scrollable content */}
-        <div className="sparta-stats-drawer-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 30 }}>
+        <div className="ironbike-stats-drawer-content" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 30 }}>
           {isLoading ? (
             <p style={{ color: 'var(--fg-3)', fontSize: 13 }}>Loading…</p>
           ) : !stats ? (
@@ -208,12 +224,26 @@ export default function SegmentStatsDrawer({
         </div>
 
         {/* Footer */}
-        <div className="sparta-stats-drawer-footer" style={{ padding: '16px 28px', borderTop: '1px solid var(--border-1)', display: 'flex', gap: 12, flexShrink: 0, background: 'var(--bg-1)' }}>
+        <div className="ironbike-stats-drawer-footer" style={{ padding: '16px 28px', borderTop: '1px solid var(--border-1)', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0, background: 'var(--bg-1)' }}>
+          {exportError && (
+            <div style={{ fontSize: 12, color: '#DC2626' }}>{exportError}</div>
+          )}
+          <div style={{ display: 'flex', gap: 12 }}>
           <button
             onClick={onClose}
             style={{ flexShrink: 0, padding: '11px 18px', border: '1px solid var(--border-1)', background: 'var(--bg-1)', borderRadius: 6, fontFamily: 'var(--font-sans, inherit)', fontWeight: 570, fontSize: 14, cursor: 'pointer', color: 'var(--fg-1)' }}
           >
             Close
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={isExporting}
+            style={{ flexShrink: 0, padding: '11px 18px', border: '1px solid var(--border-1)', background: 'var(--bg-1)', borderRadius: 6, fontFamily: 'var(--font-sans, inherit)', fontWeight: 570, fontSize: 14, cursor: isExporting ? 'not-allowed' : 'pointer', color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1v8M4 6l3 3 3-3M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {isExporting ? 'Exporting…' : 'Export for rapidmail'}
           </button>
           {onGenerateCampaign && (
             <button
@@ -223,6 +253,7 @@ export default function SegmentStatsDrawer({
               Generate campaign →
             </button>
           )}
+          </div>
         </div>
       </aside>
     </>

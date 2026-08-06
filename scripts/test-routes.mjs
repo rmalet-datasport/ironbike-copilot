@@ -11,6 +11,8 @@
  *   DEMO_PASSWORD — required for tests 4–7 (cookie-gated tests)
  */
 
+import ExcelJS from 'exceljs'
+
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
 const PASSWORD  = process.env.DEMO_PASSWORD ?? ''
 
@@ -115,6 +117,25 @@ if (!cookie) {
     const json = JSON.parse(await p2.text())
     check('stats: no raw rows in response', !JSON.stringify(json).includes('firstName'), 'response leaked participant fields')
   }
+
+  // export: deliberate exception — rapidmail-format xlsx (Mailadresse/Vorname/Extra1/Startnummer)
+  const exportFilters = [{ id: 'f1', field: 'hasEmail', value: 'true' }]
+  const p2b = await r('/api/participants/export', { cookie, body: { filters: exportFilters } })
+  check('export: hasEmail filter → 200', p2b.status === 200, `status=${p2b.status}`)
+  if (p2b.status === 200) {
+    check('export: content-type is xlsx', (p2b.headers.get('content-type') ?? '').includes('spreadsheetml'), p2b.headers.get('content-type') ?? 'none')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(await p2b.arrayBuffer())
+    const sheet = wb.worksheets[0]
+    const header = sheet.getRow(1).values.slice(1)
+    check('export: header is Mailadresse,Vorname,Extra1,Startnummer', JSON.stringify(header) === JSON.stringify(['Mailadresse', 'Vorname', 'Extra1', 'Startnummer']), JSON.stringify(header))
+
+    const countRes = await r('/api/participants/count', { cookie, body: { filters: exportFilters } })
+    const expectedCount = JSON.parse(await countRes.text()).count
+    check('export: row count matches /count (hasEmail filter, so no rows dropped)', sheet.rowCount - 1 === expectedCount, `rows=${sheet.rowCount - 1}, count=${expectedCount}`)
+  }
+  const p2c = await r('/api/participants/export', { body: { filters: [] } })
+  check('export: unauthenticated → blocked', p2c.status >= 300, `status=${p2c.status}`)
 
   // main AI route: unknown gate → 400 before Anthropic
   const p3 = await r('/api/ai', { cookie, body: { gate: 'unknown', segment: 'x', channels: [] } })

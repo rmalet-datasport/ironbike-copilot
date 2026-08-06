@@ -77,11 +77,11 @@ export default function FinishPage() {
   };
 
   return (
-    <div className="sparta-gate-page" style={{ padding: '0 28px 28px' }}>
+    <div className="ironbike-gate-page" style={{ padding: '0 28px 28px' }}>
       <GateTimeline activeGate="finish" />
 
       {/* KPI strip — chiffres réels ou constants, jamais fabriqués */}
-      <div className="sparta-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, margin: '20px 0' }}>
+      <div className="ironbike-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, margin: '20px 0' }}>
         {[
           { label: 'Total Basis', value: counts.total !== undefined ? counts.total.toLocaleString('en-US') : '…', sub: 'Alle Austragungen' },
           { label: 'Per E-Mail erreichbar', value: counts.reachable !== undefined ? counts.reachable.toLocaleString('en-US') : '…', sub: '72,1% der Basis' },
@@ -96,8 +96,8 @@ export default function FinishPage() {
         ))}
       </div>
 
-      <div className="sparta-gate-layout" style={{ display: 'flex', gap: 20 }}>
-        <div className="sparta-gate-left" style={{ flex: selectedId ? '0 0 380px' : '1 1 auto', maxWidth: selectedId ? 380 : 700, display: 'flex', flexDirection: 'column', gap: 8, transition: 'flex-basis 0.2s ease' }}>
+      <div className="ironbike-gate-layout" style={{ display: 'flex', gap: 20 }}>
+        <div className="ironbike-gate-left" style={{ flex: selectedId ? '0 0 380px' : '1 1 auto', maxWidth: selectedId ? 380 : 700, display: 'flex', flexDirection: 'column', gap: 8, transition: 'flex-basis 0.2s ease' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
             <div>
               <span style={{ fontSize: 12, fontWeight: 570, color: 'var(--fg-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Renntag &amp; danach</span>

@@ -38,7 +38,7 @@ interface ContextValue {
   updateAsset: (id: string, edited: CampaignAsset) => void;
 }
 
-const STORAGE_KEY = 'sparta_saved_assets';
+const STORAGE_KEY = 'ironbike_saved_assets';
 
 function loadFromStorage(): SavedAsset[] {
   try {

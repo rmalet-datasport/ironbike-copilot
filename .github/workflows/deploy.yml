@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/datasport-ai/sparta-copilot
+  IMAGE_NAME: ghcr.io/datasport-ai/ironbike-copilot
 
 jobs:
   security-scan:
@@ -95,12 +95,12 @@ jobs:
 
       - name: Create app directory
         run: |
-          mkdir -p /opt/apps/sparta-copilot
-          touch /opt/apps/sparta-copilot/.env
+          mkdir -p /opt/apps/ironbike-copilot
+          touch /opt/apps/ironbike-copilot/.env
 
       - name: Create .env from GitHub Secrets
         run: |
-          cat > /opt/apps/sparta-copilot/.env << EOF
+          cat > /opt/apps/ironbike-copilot/.env << EOF
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
           DEMO_PASSWORD=${{ secrets.DEMO_PASSWORD }}
           DEMO_COOKIE_SECRET=${{ secrets.DEMO_COOKIE_SECRET }}
@@ -108,15 +108,15 @@ jobs:
 
       - name: Copy docker-compose.prod.yml
         run: |
-          cp docker-compose.prod.yml /opt/apps/sparta-copilot/docker-compose.yml
+          cp docker-compose.prod.yml /opt/apps/ironbike-copilot/docker-compose.yml
 
       - name: Pull and deploy
         run: |
-          cd /opt/apps/sparta-copilot
+          cd /opt/apps/ironbike-copilot
           docker compose pull
           docker compose up -d
 
       - name: Verify deployment
         run: |
           sleep 10
-          docker ps | grep sparta-copilot
+          docker ps | grep ironbike-copilot

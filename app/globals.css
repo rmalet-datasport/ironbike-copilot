@@ -90,7 +90,7 @@ body {
 /* ─── Responsive ────────────────────────────────────────────────── */
 
 /* Hamburger button — hidden on desktop */
-.sparta-hamburger {
+.ironbike-hamburger {
   display: none;
   align-items: center;
   justify-content: center;
@@ -105,7 +105,7 @@ body {
 }
 
 /* Mobile overlay behind the sidebar */
-.sparta-overlay {
+.ironbike-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -115,12 +115,12 @@ body {
 
 @media (max-width: 767px) {
   /* KPI grid: 2 columns instead of 4 */
-  .sparta-kpi-grid {
+  .ironbike-kpi-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
   /* Sidebar becomes a slide-in drawer */
-  .sparta-sidebar {
+  .ironbike-sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -130,52 +130,52 @@ body {
     transition: transform 0.25s ease;
     overflow-y: auto;
   }
-  .sparta-sidebar.open {
+  .ironbike-sidebar.open {
     transform: translateX(0);
   }
 
   /* Overlay visible when sidebar is open */
-  .sparta-overlay.visible {
+  .ironbike-overlay.visible {
     display: block;
   }
 
   /* Show hamburger */
-  .sparta-hamburger {
+  .ironbike-hamburger {
     display: flex;
   }
 
   /* Gate two-column → single column */
-  .sparta-gate-layout {
+  .ironbike-gate-layout {
     flex-direction: column !important;
   }
-  .sparta-gate-left {
+  .ironbike-gate-left {
     flex: none !important;
     width: 100%;
   }
 
   /* Reduce page padding on small screens */
-  .sparta-gate-page {
+  .ironbike-gate-page {
     padding: 16px !important;
   }
 
   /* Stats drawer: full-width on mobile */
-  .sparta-stats-drawer {
+  .ironbike-stats-drawer {
     width: 100vw !important;
   }
-  .sparta-stats-drawer-header,
-  .sparta-stats-drawer-content,
-  .sparta-stats-drawer-footer {
+  .ironbike-stats-drawer-header,
+  .ironbike-stats-drawer-content,
+  .ironbike-stats-drawer-footer {
     padding-left: 16px !important;
     padding-right: 16px !important;
   }
-  .sparta-nat-label {
+  .ironbike-nat-label {
     width: 90px !important;
   }
 }
 
 @media (min-width: 768px) and (max-width: 1079px) {
   /* Narrow left column on small laptops */
-  .sparta-gate-left {
+  .ironbike-gate-left {
     flex: 0 0 300px !important;
   }
 }

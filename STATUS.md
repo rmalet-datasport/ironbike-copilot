@@ -1,4 +1,4 @@
-# Sparta Co-Pilot — État du projet
+# Iron Bike Co-Pilot — État du projet
 
 ## Comment lancer le projet
 

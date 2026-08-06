@@ -8,6 +8,7 @@ import {
   CUSTOM_SEGMENT_COLORS,
 } from '@/lib/types/segments';
 import type { PredefinedSegment } from '@/lib/segments/predefined';
+import { exportSegmentList, slugifyForFilename } from '@/lib/utils/exportSegment';
 
 const ALL_FIELDS: FilterField[] = [
   'gender', 'age_min', 'age_max', 'nationality', 'geoZone', 'hasEmail', 'registrationStatus2026',
@@ -34,6 +35,8 @@ export default function SegmentBuilder({
   const [selectedBaseIds, setSelectedBaseIds] = useState<string[]>(() => initialSegment?.baseSegmentIds ?? []);
   const [matchCount, setMatchCount] = useState<number | null>(null);
   const [isCounting, setIsCounting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const scopeFilterGroups = selectedBaseIds.length > 0
     ? gateSegments.filter(s => selectedBaseIds.includes(s.id)).map(s => s.filters)
@@ -83,6 +86,19 @@ export default function SegmentBuilder({
   };
 
   const removeFilter = (id: string) => setFilters(prev => prev.filter(f => f.id !== id));
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const filename = `${slugifyForFilename(name || 'segment')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      await exportSegmentList(filters, scopeFilterGroups, filename);
+    } catch {
+      setExportError('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleSave = () => {
     if (!name.trim()) return;
@@ -229,7 +245,7 @@ export default function SegmentBuilder({
         </div>
 
         {/* Match count */}
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-2)', border: '1px solid var(--border-1)', marginBottom: 24, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-2)', border: '1px solid var(--border-1)', marginBottom: 8, display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 22, fontWeight: 570, fontFamily: 'var(--font-mono)', color: 'var(--fg-1)' }}>
             {isCounting || matchCount === null ? '…' : matchCount.toLocaleString('en-US')}
           </span>
@@ -239,6 +255,21 @@ export default function SegmentBuilder({
               : 'participants match these criteria'}
           </span>
         </div>
+
+        <button
+          onClick={handleExport}
+          disabled={isExporting || !matchCount}
+          style={{ width: '100%', padding: '8px 0', marginBottom: 8, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-1)', background: 'var(--bg-1)', color: 'var(--fg-2)', fontSize: 12, cursor: isExporting || !matchCount ? 'not-allowed' : 'pointer', opacity: !matchCount ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+        >
+          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8M4 6l3 3 3-3M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {isExporting ? 'Exporting…' : 'Export for rapidmail (.xlsx)'}
+        </button>
+        {exportError && (
+          <div style={{ fontSize: 11, color: '#DC2626', marginBottom: 8 }}>{exportError}</div>
+        )}
+        <div style={{ marginBottom: 16 }} />
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

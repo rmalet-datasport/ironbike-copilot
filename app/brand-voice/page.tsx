@@ -4,10 +4,10 @@ import { useState, useRef } from 'react';
 import { useBrandHistory } from '@/lib/context/BrandHistoryContext';
 
 const GATE_LABELS: Record<string, string> = {
-  gate0: 'Start of Campaign',
-  gate1: 'Ballot Opening',
-  gate2: 'Lottery',
-  gate3: 'Post Race',
+  gate0: 'Ankündigung',
+  gate1: 'Anmeldephase',
+  gate2: 'Race Week',
+  gate3: 'Renntag & danach',
 };
 
 const CHANNEL_COLORS: Record<string, { color: string; bg: string }> = {
@@ -19,17 +19,17 @@ const CHANNEL_COLORS: Record<string, { color: string; bg: string }> = {
 
 const TEMPLATE_CSV = [
   'channel,gate,segment,subject,title,body,caption,hashtags',
-  'email,registration,ambassador,You are one of us,,We noticed you have been part of our journey for years. This year we want to make it official.,,',
-  'instagram,,,,,,"Ready to take on the streets of Copenhagen? Registration is open.","#CopenhagenMarathon #CPH26 #RunCPH"',
-  'sms,lottery,,,,Your spot is confirmed. See you at the start line on May 17.,,',
-  ',,,,,Every finish line is a new beginning. Copenhagen Marathon 2026 — are you ready?,,',
+  'newsletter,registration,reactivation_kernradius,Nach 30 Jahren ist Schluss,,We noticed you have been part of our journey for years. This year we want to make it official.,,',
+  'feed_post,,,,,,"Ready to take on the Iron Bike Race Einsiedeln? Registration is open.","#IronBikeRace #Einsiedeln2026"',
+  'story,lottery,,,,See you at the start line on 27 September.,,',
+  ',,,,,Every finish line is a new beginning. Iron Bike Race Einsiedeln 2026 — are you ready?,,',
 ].join('\n');
 
 const EXAMPLE_ROWS = [
-  { channel: 'email',     gate: 'registration', segment: 'ambassador', subject: 'You are one of us',             body: 'We noticed you have been part of our journey for years...' },
-  { channel: 'instagram', gate: '',             segment: '',            caption: 'Ready for Copenhagen?',        hashtags: '#CPH26 #RunCPH' },
-  { channel: 'sms',       gate: 'lottery',      segment: '',            body: 'Your spot is confirmed. See you May 17.' },
-  { channel: '',          gate: '',             segment: '',            body: 'Every finish line is a new beginning.' },
+  { channel: 'newsletter', gate: 'registration', segment: 'reactivation_kernradius', subject: 'Nach 30 Jahren ist Schluss', body: 'We noticed you have been part of our journey for years...' },
+  { channel: 'feed_post',  gate: '',             segment: '',                       caption: 'Ready for the Iron Bike Race?', hashtags: '#IronBikeRace2026' },
+  { channel: 'story',      gate: 'lottery',      segment: '',                       body: 'See you at the start line on 27 September.' },
+  { channel: '',           gate: '',             segment: '',                       body: 'Every finish line is a new beginning.' },
 ];
 
 export default function BrandVoicePage() {
@@ -85,7 +85,7 @@ export default function BrandVoicePage() {
           <h1 style={{ fontSize: 22, fontWeight: 570, color: 'var(--fg-1)', margin: 0 }}>Brand Voice</h1>
         </div>
         <p style={{ fontSize: 14, color: 'var(--fg-2)', lineHeight: 1.6, margin: 0, maxWidth: 560 }}>
-          Teach Sparta your communication style. By uploading your past campaigns,
+          Teach Iron Bike Co-Pilot your communication style. By uploading your past campaigns,
           every new generation will automatically align with your brand voice.
         </p>
       </div>
@@ -218,9 +218,9 @@ export default function BrandVoicePage() {
           {/* How examples are used */}
           <div style={{ padding: '16px 18px', border: '1px solid var(--border-1)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-2)' }}>
             <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--fg-1)' }}>How Sparta uses these examples</strong>
+              <strong style={{ color: 'var(--fg-1)' }}>How Iron Bike Co-Pilot uses these examples</strong>
               <br />
-              At each generation, Sparta automatically selects the most relevant examples for the active gate and segment.
+              At each generation, Iron Bike Co-Pilot automatically selects the most relevant examples for the active gate and segment.
               Highly specific examples (channel + gate + segment) take priority over global ones.
               Up to 6 examples are injected into the prompt to guide the tone, style and structure of the generated assets.
             </div>
@@ -262,7 +262,7 @@ export default function BrandVoicePage() {
                 },
                 {
                   num: '3',
-                  title: 'Sparta adopts your style',
+                  title: 'Iron Bike Co-Pilot adopts your style',
                   desc: 'At each generation, relevant examples are automatically injected into the prompt.',
                   icon: (
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

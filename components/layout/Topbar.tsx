@@ -2,12 +2,13 @@
 
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/context/SidebarContext';
+import { EVENT } from '@/lib/constants';
 
 const GATE_LABELS: Record<string, { gate: string; label: string }> = {
-  '/gate/creation': { gate: 'Journey 0', label: 'Start of Campaign' },
-  '/gate/registration': { gate: 'Journey 1', label: 'Ballot Opening' },
-  '/gate/lottery': { gate: 'Journey 2', label: 'Lottery' },
-  '/gate/finish': { gate: 'Journey 3', label: 'Post Race' },
+  '/gate/creation': { gate: 'Phase 0', label: 'Ankündigung' },
+  '/gate/registration': { gate: 'Phase 1', label: 'Anmeldephase' },
+  '/gate/lottery': { gate: 'Phase 2', label: 'Race Week' },
+  '/gate/finish': { gate: 'Phase 3', label: 'Renntag & danach' },
 };
 
 export default function Topbar() {
@@ -31,7 +32,7 @@ export default function Topbar() {
       }}
     >
       {/* Hamburger — mobile only */}
-      <button className="sparta-hamburger" onClick={toggle} aria-label="Toggle menu">
+      <button className="ironbike-hamburger" onClick={toggle} aria-label="Toggle menu">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
           <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
@@ -39,7 +40,7 @@ export default function Topbar() {
 
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <span style={{ color: 'var(--fg-3)', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Copenhagen Marathon 2026</span>
+        <span style={{ color: 'var(--fg-3)', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{EVENT.name} {EVENT.raceDate.slice(0, 4)}</span>
         {gateInfo && (
           <>
             <span style={{ color: 'var(--border-2)', fontSize: 13 }}>/</span>

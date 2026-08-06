@@ -141,7 +141,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
       {/* Content */}
       <div style={{ padding: '14px 16px' }}>
         <style>{`
-          .sparta-editable-line {
+          .ironbike-editable-line {
             border: 1px solid transparent;
             border-radius: 3px;
             background: transparent;
@@ -155,9 +155,9 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
             transition: border-color 0.12s, background-color 0.12s;
             box-sizing: border-box;
           }
-          .sparta-editable-line:hover { background-color: var(--bg-2); border-color: var(--border-1); }
-          .sparta-editable-line:focus { background-color: var(--bg-1); border-color: var(--color-grey-400, #9CA3AF); }
-          .sparta-editable-area {
+          .ironbike-editable-line:hover { background-color: var(--bg-2); border-color: var(--border-1); }
+          .ironbike-editable-line:focus { background-color: var(--bg-1); border-color: var(--color-grey-400, #9CA3AF); }
+          .ironbike-editable-area {
             border: 1px solid transparent;
             border-radius: 3px;
             background: transparent;
@@ -173,8 +173,8 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
             transition: border-color 0.12s, background-color 0.12s;
             box-sizing: border-box;
           }
-          .sparta-editable-area:hover { background-color: var(--bg-2); border-color: var(--border-1); }
-          .sparta-editable-area:focus { background-color: var(--bg-1); border-color: var(--color-grey-400, #9CA3AF); }
+          .ironbike-editable-area:hover { background-color: var(--bg-2); border-color: var(--border-1); }
+          .ironbike-editable-area:focus { background-color: var(--bg-1); border-color: var(--color-grey-400, #9CA3AF); }
         `}</style>
 
         {/* feed_post */}
@@ -184,7 +184,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Copy</div>
                 <textarea
-                  className="sparta-editable-area"
+                  className="ironbike-editable-area"
                   value={editedAsset.copy ?? ''}
                   onChange={e => { setField('copy', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                   onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
@@ -197,7 +197,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>CTA</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.cta ?? ''}
                   onChange={e => setField('cta', e.target.value)}
                   style={{ fontSize: 12, fontWeight: 570, color: style.color }}
@@ -219,7 +219,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Edition</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.editionNumber ?? ''}
                   onChange={e => setField('editionNumber', e.target.value)}
                   style={{ fontSize: 12, color: 'var(--fg-2)' }}
@@ -230,7 +230,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Data point</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.dataPoint ?? ''}
                   onChange={e => setField('dataPoint', e.target.value)}
                   style={{ fontSize: 20, fontWeight: 570, fontFamily: 'var(--font-mono)', color: style.color }}
@@ -241,7 +241,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Sentence</div>
                 <textarea
-                  className="sparta-editable-area"
+                  className="ironbike-editable-area"
                   value={editedAsset.sentence ?? ''}
                   onChange={e => { setField('sentence', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                   onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
@@ -254,7 +254,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Sticker link</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.stickerLink ?? ''}
                   onChange={e => setField('stickerLink', e.target.value)}
                   style={{ fontSize: 12, color: style.color }}
@@ -271,7 +271,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Subject</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.subject ?? ''}
                   onChange={e => setField('subject', e.target.value)}
                   style={{ fontSize: 13, fontWeight: 570 }}
@@ -282,7 +282,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Preheader</div>
                 <input
-                  className="sparta-editable-line"
+                  className="ironbike-editable-line"
                   value={editedAsset.preheader ?? ''}
                   onChange={e => setField('preheader', e.target.value)}
                   style={{ fontSize: 12, color: 'var(--fg-3)' }}
@@ -293,7 +293,7 @@ export default function AssetCard({ asset, onRegenerate, isRegenerating, onSave,
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 10, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Body</div>
                 <textarea
-                  className="sparta-editable-area"
+                  className="ironbike-editable-area"
                   value={editedAsset.body ?? ''}
                   onChange={e => { setField('body', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                   onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}

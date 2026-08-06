@@ -7,6 +7,7 @@
 | `POST /api/ai` | Génération de campagne marketing | Non | JSON assets |
 | `POST /api/participants/count` | Compte réel de participants matchant des filtres | Non | `{ count: number }` |
 | `POST /api/participants/stats` | Agrégats structurés sur un pool filtré | Non | `{ stats: ParticipantStats \| null }` |
+| `POST /api/participants/export` | Export des destinataires d'un segment au format d'import rapidmail | Non | `.xlsx` (`Mailadresse, Vorname, Extra1, Startnummer`) |
 
 **Supprimées** (voir `IRONBIKE_BRIEF.md` §4.1ter — avec seulement 6-7 champs réellement
 filtrables, ces mécanismes IA ne faisaient que recombiner les mêmes filtres sous un nom
@@ -144,8 +145,10 @@ Voir `scripts/test-routes.mjs`.
 { stats: ParticipantStats | null }  // voir lib/db/segment-stats.ts — agrégats uniquement
 ```
 
-Les deux routes n'exposent **jamais** de champ individuel (nom, email, date de naissance) —
-uniquement des comptes et des agrégats. Voir `DATA_MODEL.md` pour le détail du modèle serveur.
+`/count` et `/stats` n'exposent **jamais** de champ individuel (nom, email, date de naissance) —
+uniquement des comptes et des agrégats. `/export` est l'exception documentée (téléchargement
+`.xlsx` explicite au format d'import rapidmail) — voir `DATA_MODEL.md` pour le détail du
+modèle serveur.
 
 ---
 

@@ -40,7 +40,7 @@ export default function AccessPage() {
           </svg>
         </div>
 
-        <h1 style={styles.title}>Sparta Co-Pilot</h1>
+        <h1 style={styles.title}>Iron Bike Co-Pilot</h1>
         <p style={styles.subtitle}>Demo access — enter the demo password to continue</p>
 
         <form onSubmit={handleSubmit} style={styles.form}>

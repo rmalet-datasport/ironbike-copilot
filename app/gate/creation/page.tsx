@@ -41,11 +41,11 @@ export default function CreationPage() {
   };
 
   return (
-    <div className="sparta-gate-page" style={{ padding: '0 28px 28px' }}>
+    <div className="ironbike-gate-page" style={{ padding: '0 28px 28px' }}>
       <GateTimeline activeGate="creation" />
 
       {/* KPI strip — chiffres réels ou constants, jamais fabriqués (voir IRONBIKE_BRIEF.md §1/§3) */}
-      <div className="sparta-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, margin: '20px 0' }}>
+      <div className="ironbike-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, margin: '20px 0' }}>
         {[
           { label: 'Total Basis', value: total !== undefined ? total.toLocaleString('en-US') : '…', sub: 'Alle Austragungen' },
           { label: 'Austragung', value: `${EVENT.edition}.`, sub: EVENT.isLastEdition ? 'letzte Austragung' : '' },
@@ -60,9 +60,9 @@ export default function CreationPage() {
         ))}
       </div>
 
-      <div className="sparta-gate-layout" style={{ display: 'flex', gap: 20 }}>
+      <div className="ironbike-gate-layout" style={{ display: 'flex', gap: 20 }}>
         {/* Left */}
-        <div className="sparta-gate-left" style={{ flex: selectedId ? '0 0 380px' : '1 1 auto', maxWidth: selectedId ? 380 : 700, transition: 'flex-basis 0.2s ease' }}>
+        <div className="ironbike-gate-left" style={{ flex: selectedId ? '0 0 380px' : '1 1 auto', maxWidth: selectedId ? 380 : 700, transition: 'flex-basis 0.2s ease' }}>
           <div style={{ marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 570, color: 'var(--fg-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ankündigung</span>
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--fg-3)' }}>Keine Feinsegmentierung — Newsletter 1 und Post 1 richten sich an alle.</span>

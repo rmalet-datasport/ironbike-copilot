@@ -9,6 +9,39 @@ const client = new Anthropic({
 
 const VALID_CHANNELS = new Set(['feed_post', 'story', 'newsletter'])
 
+const ASSET_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    assets: {
+      type: 'array' as const,
+      items: {
+        type: 'object' as const,
+        properties: {
+          channel: { type: 'string' as const, enum: ['feed_post', 'story', 'newsletter'] },
+          copy: { type: 'string' as const, description: 'feed_post — Post-Text auf Deutsch (Schweizer Hochdeutsch).' },
+          cta: { type: 'string' as const, description: "feed_post — Kurzer Call-to-Action, z.B. 'Jetzt anmelden'." },
+          visualDirection: { type: 'string' as const, enum: ['typo', 'foto', 'ki_illustration'], description: 'feed_post' },
+          editionNumber: { type: 'string' as const, description: "story — z.B. 'Countdown Tag 12', weglassen wenn nicht passend." },
+          dataPoint: { type: 'string' as const, description: 'story — Eine konkrete Zahl oder Fakt, kurz.' },
+          sentence: { type: 'string' as const, description: 'story — Ein bis zwei kurze Sätze, Story-Format.' },
+          stickerLink: { type: 'string' as const, description: 'story — optionaler Link-Sticker-Text, weglassen bei den letzten Countdown-Items.' },
+          subject: { type: 'string' as const, description: 'newsletter — Betreffzeile.' },
+          preheader: { type: 'string' as const, description: 'newsletter — Vorschautext, max. 100 Zeichen.' },
+          body: { type: 'string' as const, description: 'newsletter — Newsletter-Text auf Deutsch.' },
+          personalizationFields: {
+            type: 'array' as const,
+            items: { type: 'string' as const },
+            description: "newsletter — nur angeben, wenn eine echte Personalisierung (z.B. Vorname) im Text verwendet wird.",
+          },
+          meta: { type: 'string' as const, description: 'Ein Satz, der die Absicht des Assets beschreibt.' },
+        },
+        required: ['channel', 'meta'],
+      },
+    },
+  },
+  required: ['assets'],
+}
+
 function buildDryRunAsset(channel: string) {
   switch (channel) {
     case 'feed_post':  return { channel, copy: '[DRY RUN] Test copy', cta: '[DRY RUN] Jetzt anmelden', visualDirection: 'typo', meta: 'dry-run fixture' }
@@ -75,12 +108,23 @@ export async function POST(req: NextRequest) {
       max_tokens: 3000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
+      tools: [{
+        name: 'generate_campaign_assets',
+        description: 'Liefert die generierten Marketing-Assets als strukturierte Daten.',
+        input_schema: ASSET_SCHEMA,
+      }],
+      tool_choice: { type: 'tool', name: 'generate_campaign_assets' },
     });
 
-    const raw = message.content[0]?.type === 'text' ? message.content[0].text : '';
-    const text = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+    const toolUse = message.content.find(block => block.type === 'tool_use');
+    if (!toolUse) {
+      return new Response(JSON.stringify({ error: 'No structured output from model' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(text, {
+    return new Response(JSON.stringify(toolUse.input), {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   } catch (err) {

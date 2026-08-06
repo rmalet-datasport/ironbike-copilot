@@ -121,13 +121,29 @@ Jamais pour les couleurs, polices ou border-radius — utiliser les CSS vars.
 (distribution hors-git, voir `IRONBIKE_BRIEF.md` §7bis). Colonnes : `firstName, lastName,
 gender, birthDate, nationIOC, email, zip, town, Status` (`Status` toujours vide, ignorée).
 
-### Le dataset ne quitte jamais le serveur
+### Le dataset ne quitte jamais le serveur (sauf export explicite)
 - `lib/db/participants.ts` et `lib/db/segment-filter.ts` importent le CSV réel — **ne jamais
   les importer depuis un composant `'use client'`**. Seules les routes serveur
   (`app/api/participants/*`, `app/api/ai/route.ts`) les utilisent.
-- Le client n'accède aux données que via `POST /api/participants/count` (`{ count }`) et
-  `POST /api/participants/stats` (`{ stats: ParticipantStats }`) — jamais une liste de
-  participants individuels.
+- Le client n'accède aux données que via `POST /api/participants/count` (`{ count }`),
+  `POST /api/participants/stats` (`{ stats: ParticipantStats }`) et
+  `POST /api/participants/export` (xlsx, voir ci-dessous) — jamais un JSON contenant une liste
+  de participants individuels.
+
+### Exception documentée : export xlsx d'un segment (`app/api/participants/export/route.ts`)
+Pas d'intégration avec l'outil d'envoi (rapidmail) — l'organisateur exporte donc manuellement
+la liste des destinataires d'un segment pour l'importer côté rapidmail. `lib/db/segment-export.ts`
+(`toRapidmailXlsx`) construit un `.xlsx` avec **exactement les colonnes attendues par l'import
+rapidmail** (format fourni par l'équipe) : `Mailadresse, Vorname, Extra1, Startnummer`.
+`Mailadresse` = `email`, `Vorname` = `firstName`. Seules les personnes avec un email sont
+incluses (une ligne sans `Mailadresse` est inutilisable pour l'import). `Extra1` et
+`Startnummer` restent vides — la segmentation par langue se fait en amont dans l'outil
+(nationalité/geoZone du segment), pas ligne par ligne dans ce fichier ; `Startnummer` n'a pas
+d'équivalent avant course. Déclenché uniquement par un clic explicite ("Export for rapidmail"
+dans `SegmentBuilder` et `SegmentStatsDrawer`, via `lib/utils/exportSegment.ts` côté client) —
+jamais automatique, jamais bundlé, toujours derrière l'auth `demo_access`. Ce n'est pas une
+régression de la règle ci-dessus : c'est un téléchargement ponctuel et volontaire, pas une API
+de listing.
 - Vérification à refaire après toute modification de ce périmètre : `npm run build` doit
   produire des pages `gate/*` de quelques kB (First Load JS) — une régression ferait gonfler
   ce chiffre de plusieurs Mo si le dataset se retrouvait bundlé côté client.

@@ -1,17 +1,17 @@
 services:
   app:
-    image: ghcr.io/datasport-ai/sparta-copilot:latest
-    container_name: sparta-copilot
+    image: ghcr.io/datasport-ai/ironbike-copilot:latest
+    container_name: ironbike-copilot
     restart: always
     env_file: .env
     networks:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.sparta-copilot.rule=Host(`sparta-copilot.lab.datasport.com`)"
-      - "traefik.http.routers.sparta-copilot.entrypoints=websecure"
-      - "traefik.http.routers.sparta-copilot.tls=true"
-      - "traefik.http.services.sparta-copilot.loadbalancer.server.port=3000"
+      - "traefik.http.routers.ironbike-copilot.rule=Host(`ironbike-copilot.lab.datasport.com`)"
+      - "traefik.http.routers.ironbike-copilot.entrypoints=websecure"
+      - "traefik.http.routers.ironbike-copilot.tls=true"
+      - "traefik.http.services.ironbike-copilot.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null --server-response http://127.0.0.1:3000/access 2>&1 | grep -q 'HTTP/' || exit 1"]
       interval: 30s

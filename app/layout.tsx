@@ -7,7 +7,7 @@ import { BrandHistoryProvider } from '@/lib/context/BrandHistoryContext';
 import { SidebarProvider } from '@/lib/context/SidebarContext';
 
 export const metadata: Metadata = {
-  title: 'Sparta Co-Pilot — Copenhagen Marathon 2026',
+  title: 'Iron Bike Co-Pilot — Iron Bike Race Einsiedeln 2026',
   description: 'Marketing automation for event organizers by Datasport',
 };
 

@@ -17,17 +17,30 @@ lib/segments/predefined.ts  → métadonnées des segments prédéfinis (safe cl
 app/api/participants/*      → seul point d'accès du client aux données réelles
 ```
 
-### Règle absolue : le dataset ne quitte jamais le serveur
+### Règle absolue : le dataset ne quitte jamais le serveur (sauf export explicite)
 
 `lib/db/participants.ts` et `lib/db/segment-filter.ts` importent des données réelles
 (noms, emails, dates de naissance) et ne doivent **jamais** être importés depuis un composant
 `'use client'`. Le client n'accède aux données que via `app/api/participants/count` et
 `app/api/participants/stats`, qui ne renvoient que des agrégats (un compteur, ou un objet
-`ParticipantStats` structuré) — jamais la liste des participants.
+`ParticipantStats` structuré) — jamais un JSON avec la liste des participants.
 
 Vérification faite lors de cette migration : le build Next.js confirme que les pages gate
 pèsent ~4 kB (First Load JS), ce qui exclut que le dataset de 18 607 lignes soit bundlé
 côté client.
+
+**Exception** : `app/api/participants/export/route.ts` — pas d'intégration avec l'outil
+d'envoi (rapidmail), l'organisateur exporte donc manuellement la liste des destinataires d'un
+segment pour la charger côté rapidmail. `lib/db/segment-export.ts` (`toRapidmailXlsx`) construit
+un `.xlsx` server-side à partir du même `filterParticipants(...)` que `/count`/`/stats`, avec
+exactement les colonnes attendues par l'import rapidmail (format fourni par l'équipe) :
+`Mailadresse, Vorname, Extra1, Startnummer`. Seuls `Mailadresse` (`email`) et `Vorname`
+(`firstName`) sont remplis ; `Extra1` (langue) et `Startnummer` restent vides — la
+segmentation par langue se fait en amont (le segment lui-même est déjà filtré par
+nationalité/geoZone), pas colonne par colonne dans ce fichier. Seules les personnes avec un
+email sont incluses. Déclenché uniquement par un clic explicite ("Export for rapidmail" dans
+`SegmentBuilder` et `SegmentStatsDrawer`) — jamais un listing automatique, toujours derrière
+l'auth `demo_access`.
 
 ---
 
