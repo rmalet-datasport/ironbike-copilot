@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import ExcelJS from 'exceljs';
+import { get } from '@vercel/blob';
 import type { Participant, GeoZone } from '@/lib/types/participant';
 
 const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
@@ -15,6 +16,31 @@ const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
 // Nom de fichier attendu pour la liste des inscrits 2026 — chaque collègue place sa copie
 // (même nom exact) dans son data/ local. Voir IRONBIKE_BRIEF.md §4.1bis.
 const REGISTERED_PATH = path.join(process.cwd(), 'data', 'Angemeldete Teilnehmende Iron Bike.xlsx');
+
+// Fallback prod (Vercel) : en local, chaque collègue garde sa copie dans data/ (jamais commitée,
+// voir CLAUDE.md §Données). En prod, ces fichiers n'existent pas dans le déploiement — ils sont
+// lus depuis un store Vercel Blob privé à la place. BLOB_READ_WRITE_TOKEN est fourni
+// automatiquement par Vercel une fois le store lié au projet ; en local, le fichier existe déjà
+// donc ce chemin n'est jamais pris.
+async function readLocalOrBlob(localPath: string, blobPathname: string): Promise<Buffer | null> {
+  if (fs.existsSync(localPath)) {
+    return fs.readFileSync(localPath);
+  }
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
+  try {
+    const result = await get(blobPathname, { access: 'private' });
+    if (!result || result.statusCode !== 200) return null;
+    const reader = result.stream.getReader();
+    const chunks: Uint8Array[] = [];
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      chunks.push(chunk.value);
+    }
+    return Buffer.concat(chunks);
+  } catch (err) {
+    console.error(`[participants] Blob fallback failed for ${blobPathname}`, err);
+    return null;
+  }
+}
 
 // Bucket approximatif par préfixe NPA — voir IRONBIKE_BRIEF.md §2.2. Ce n'est pas une distance
 // calculée : ne pas s'appuyer sur ce bucket comme fiable au NPA près (P1 : géocodage précis).
@@ -116,9 +142,10 @@ function loadAll(): Promise<LoadResult> {
 // en cache une seule fois par process — redémarrer le serveur de dev après avoir mis à jour
 // l'un des deux fichiers.
 async function computeAll(): Promise<LoadResult> {
-  const base = parseParticipantsCsv();
-  if (!fs.existsSync(REGISTERED_PATH)) return { participants: base, primoInscrits: EMPTY_PRIMO_STATS };
-  const registeredList = await loadRegisteredList(REGISTERED_PATH);
+  const base = await parseParticipantsCsv();
+  const registeredBuffer = await readLocalOrBlob(REGISTERED_PATH, 'registered-2026.xlsx');
+  if (!registeredBuffer) return { participants: base, primoInscrits: EMPTY_PRIMO_STATS };
+  const registeredList = await loadRegisteredList(registeredBuffer);
   const participants = mergeRegistrationStatus(base, registeredList);
   const primoInscrits = findPrimoInscrits(base, registeredList);
   return { participants, primoInscrits };
@@ -136,8 +163,10 @@ export function getPrimoInscritsStats(): Promise<PrimoInscritStats> {
   return loadAll().then(r => r.primoInscrits);
 }
 
-function parseParticipantsCsv(): Participant[] {
-  const raw = fs.readFileSync(DATA_PATH, 'utf-8');
+async function parseParticipantsCsv(): Promise<Participant[]> {
+  const buffer = await readLocalOrBlob(DATA_PATH, 'participants.csv');
+  if (!buffer) throw new Error('participants.csv not found locally or in Blob storage');
+  const raw = buffer.toString('utf-8');
   const lines = raw.split(/\r?\n/).filter(l => l.trim().length > 0);
   if (lines.length === 0) {
     return [];
@@ -226,9 +255,11 @@ const REGISTERED_COLUMN_ALIASES: Record<'firstName' | 'lastName' | 'email' | 'bi
   gender: ['geschlecht', 'gender', 'genre', 'sexe'],
 };
 
-async function loadRegisteredList(filePath: string): Promise<RegisteredEntry[]> {
+async function loadRegisteredList(buffer: Buffer): Promise<RegisteredEntry[]> {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exceljs's own Buffer type
+  // comes from a differently-hoisted @types/node than the ambient one; same type at runtime.
+  await wb.xlsx.load(buffer as any);
   const sheet = wb.worksheets[0];
   if (!sheet) return [];
 
