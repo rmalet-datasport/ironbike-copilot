@@ -11,8 +11,9 @@ npm run dev
 ```
 
 Nécessite `.env.local` (voir `.env.example`) + ta copie locale de `data/participants.csv`
-(et optionnellement `data/Angemeldete Teilnehmende Iron Bike.xlsx`) — distribution hors-git,
-voir `IRONBIKE_BRIEF.md` §7bis. Sans ces fichiers en local, l'app essaie de les lire depuis
+(et optionnellement `data/Angemeldete Teilnehmende Iron Bike.xlsx` et
+`data/mtb_myds_users_export_2026_08_07_1616.xlsx`) — distribution hors-git, voir
+`IRONBIKE_BRIEF.md` §7bis. Sans ces fichiers en local, l'app essaie de les lire depuis
 Vercel Blob (voir `docs/DEPLOYMENT.md`) — utile pour le déploiement, pas pour le dev quotidien.
 
 ---
@@ -34,6 +35,16 @@ Vercel Blob (voir `docs/DEPLOYMENT.md`) — utile pour le déploiement, pas pour
   `registrationStatus2026 = not_registered` manuellement via "Create a segment" pour exclure
   les déjà-inscrits avant un envoi réel. Décision produit, pas un oubli — voir la bannière sur
   Gate 1 et `GATES.md`.
+- **Prospects MTB (nouvelle source)** — export myDS réel (`data/mtb_myds_users_export_*.xlsx`,
+  gitignoré) de 57 837 personnes ayant fait au moins une course MTB Datasport (hors Iron Bike)
+  ces 5 ans. Comble le trou documenté dans `IRONBIKE_BRIEF.md` §4.1ter ("nouveaux prospects
+  jamais inscrits" n'existait dans aucune donnée disponible). Chargé par `lib/db/prospects.ts`,
+  fusionné au pool `participants.csv` via un champ `source: 'iron_bike_history' | 'mtb_prospect'`
+  filtrable dans `SegmentBuilder` sur n'importe quelle gate. Nettoyage appliqué avant exposition :
+  consentement newsletter réel (`nl_sportnews_abo=1`, pas désabonné), dédoublonnage email contre
+  `participants.csv` et `Angemeldete Teilnehmende Iron Bike.xlsx` (~24 400 prospects mailables
+  au final). Nouveaux segments prédéfinis sur Gate 1 : `prospects_mtb_kernradius/
+  hors_kernradius/etranger`. Voir `docs/DATA_MODEL.md` pour le détail.
 - Brand Voice (upload xlsx/csv d'exemples passés, injection dans le prompt)
 - **Déployé sur Vercel** (preview) — voir `docs/DEPLOYMENT.md` pour le détail complet
   (projet, Blob storage, env vars, comment redéployer/rafraîchir les données)

@@ -46,6 +46,9 @@ ironbike-copilot/
 ├── lib/
 │   ├── db/
 │   │   ├── participants.ts              (SERVEUR UNIQUEMENT — parsing CSV réel + fallback Blob)
+│   │   ├── prospects.ts                 (SERVEUR UNIQUEMENT — export MTB myDS, source distincte)
+│   │   ├── geo-zone.ts                  (bucket NPA partagé participants.ts/prospects.ts)
+│   │   ├── data-source.ts               (readLocalOrBlob partagé participants.ts/prospects.ts)
 │   │   ├── segment-filter.ts            (SERVEUR UNIQUEMENT — filterParticipants)
 │   │   ├── segment-stats.ts             (SERVEUR UNIQUEMENT — computeStats)
 │   │   └── segment-export.ts            (SERVEUR UNIQUEMENT — toRapidmailXlsx)
@@ -80,7 +83,9 @@ ironbike-copilot/
 │       ├── AssetCard.tsx
 │       └── RegeneratePrompt.tsx
 └── data/
-    └── participants.csv                 (gitignoré — jamais commité, jamais lu côté client)
+    ├── participants.csv                 (gitignoré — jamais commité, jamais lu côté client)
+    ├── Angemeldete Teilnehmende Iron Bike.xlsx   (gitignoré — inscrits 2026)
+    └── mtb_myds_users_export_2026_08_07_1616.xlsx (gitignoré — prospects MTB, voir §Données)
 ```
 
 ---
@@ -127,6 +132,35 @@ Jamais pour les couleurs, polices ou border-radius — utiliser les CSS vars.
 **Gitignoré, jamais commité.** Chaque collègue place sa propre copie locale dans `data/`
 (distribution hors-git, voir `IRONBIKE_BRIEF.md` §7bis). Colonnes : `firstName, lastName,
 gender, birthDate, nationIOC, email, zip, town, Status` (`Status` toujours vide, ignorée).
+
+### Deuxième source : prospects MTB (`lib/db/prospects.ts`)
+`data/mtb_myds_users_export_2026_08_07_1616.xlsx` — export réel myDS (gitignoré, même régime que
+`participants.csv`) de tous les comptes ayant fait **au moins une course MTB Datasport (hors Iron
+Bike) ces 5 dernières années**. Une ligne par user × édition (colonnes `myds_person_id, vorname,
+email, plz, sprache, edition, jahr, contest_distanz, nl_double_optin, nl_sportnews_abo,
+nl_abgemeldet_am`) ; `prospects.ts` les regroupe par `myds_person_id` (jamais par email seul —
+comptes familiaux partagés) avant de les exposer.
+
+C'est exactement l'audience documentée comme absente de l'outil dans `IRONBIKE_BRIEF.md` §4.1ter
+("nouveaux prospects jamais inscrits… cette audience vit dans Meta Ads Manager, pas dans
+`participants.csv`") — ce fichier comble ce trou avec de vraies données. Deux garde-fous
+appliqués **avant** qu'une personne n'entre dans le pool filtrable (jamais un filtrage a
+posteriori côté UI) :
+1. **Consentement newsletter réel** : seuls les comptes avec `nl_sportnews_abo=1` et sans
+   `nl_abgemeldet_am` renseigné sont conservés — `nl_double_optin` n'est qu'un signal de qualité
+   secondaire, jamais un filtre bloquant (contrainte légale communiquée par l'équipe dev myDS).
+2. **Dédoublonnage contre les deux fichiers Iron Bike existants** : l'export MTB n'est pas limité
+   aux gens n'ayant jamais fait l'Iron Bike (juste "au moins une course MTB, tous événements") —
+   toute personne dont l'email apparaît dans `participants.csv` ou dans
+   `Angemeldete Teilnehmende Iron Bike.xlsx` est exclue. Matching par email uniquement (l'export
+   MTB n'a ni nom de famille ni date de naissance pour un matching plus fin) — plus conservateur
+   que le matching existant : un email partagé en famille exclut tout le foyer.
+
+Résultat exposé via le champ `source: 'iron_bike_history' | 'mtb_prospect'` sur `Participant`
+(voir §Segments ci-dessous), fusionné dans le même pool que `participants.csv` — **jamais** deux
+API séparées. `geoZone` pour les prospects est dérivée du NPA brut (pas de nationalité dans cet
+export) : NPA à 4 chiffres → même bucket approximatif que `participants.csv` (voir
+`lib/db/geo-zone.ts`, partagé) ; 5 chiffres ou format non exploitable → `etranger`/`unknown`.
 
 ### Le dataset ne quitte jamais le serveur (sauf export explicite)
 - `lib/db/participants.ts` et `lib/db/segment-filter.ts` importent le CSV réel — **ne jamais
@@ -190,7 +224,7 @@ disparaissent au rechargement.
 ```ts
 type FilterField =
   | 'gender' | 'age_min' | 'age_max' | 'nationality' | 'geoZone' | 'hasEmail'
-  | 'registrationStatus2026'
+  | 'registrationStatus2026' | 'source'
 
 interface FilterCondition { id: string; field: FilterField; value: string }
 
@@ -208,7 +242,7 @@ Réduit par rapport à Sparta — pas de section IA (langage naturel / objectif 
 `IRONBIKE_BRIEF.md` §4.1ter :
 1. **Nom**
 2. **Scope** — pills des segments prédéfinis du gate (absent si le gate n'en a pas, ex. Gate 2)
-3. **Filtres** manuels (7 champs)
+3. **Filtres** manuels (8 champs)
 4. **Objectif & contexte** — texte libre injecté dans le prompt de génération
 5. **Compteur** — vrai compte via `POST /api/participants/count` (debounce 250ms)
 

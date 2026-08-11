@@ -9,7 +9,12 @@ import ExcelJS from 'exceljs';
 const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
 const REGISTERED_PATH = path.join(process.cwd(), 'data', 'Angemeldete Teilnehmende Iron Bike.xlsx');
 
+// Même règle que lib/db/geo-zone.ts.
 const KERNRADIUS_PREFIXES = new Set(['64', '88', '87', '86', '63', '80', '81']);
+const EXTRA_KERNRADIUS_CODES = new Set([
+  8902, 8903, 8904, 8905, 8906, 8907, 8908, 8910, 8911, 8912, 8913, 8914, 8915, 8916, 8917, 8918,
+  8919, 8925, 8926, 8932, 8933, 8934, 8942,
+]);
 const INNERSCHWEIZ_PREFIXES = new Set(['60']);
 
 function detectDelimiter(headerLine) {
@@ -51,6 +56,8 @@ function deriveGeoZone(nationality, zip) {
   if (!zip || zip.length < 2) return 'unknown';
   const prefix = zip.slice(0, 2);
   if (KERNRADIUS_PREFIXES.has(prefix)) return 'kernradius';
+  const npa = Number(zip);
+  if (Number.isFinite(npa) && EXTRA_KERNRADIUS_CODES.has(npa)) return 'kernradius';
   if (INNERSCHWEIZ_PREFIXES.has(prefix)) return 'innerschweiz';
   return 'reste_suisse';
 }

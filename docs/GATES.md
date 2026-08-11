@@ -35,7 +35,7 @@ Colonne gauche                                Colonne droite (flex 1)
 [Segments custom]                              [Empty state]
 ```
 
-**Segmentation hybride, mais réduite** : avec seulement 6-7 champs réellement filtrables
+**Segmentation hybride, mais réduite** : avec seulement 8 champs réellement filtrables
 (voir `DATA_MODEL.md`), les mécanismes IA de découverte (NL → filtres, objectif → segment,
 sous-segments) ont été supprimés — voir `AI_PROMPTS.md`. `SegmentBuilder` se limite à
 Nom → Scope (si le gate a des segments prédéfinis) → Filtres manuels → Objectif → Compteur.
@@ -68,14 +68,14 @@ géo/âge informative.
 Ve 7.8 – Di 20.9. Posts 3–12, Newsletter 2 (réactivation — **la plus importante**),
 Newsletter 3, Newsletter 4, countdown Stories (dès 29.8), vagues Meta.
 
-### Segments prédéfinis
+### Segments prédéfinis — réactivation (base historique Iron Bike)
 
 | Segment | Filtres | Channels |
 |---|---|---|
-| `reactivation_kernradius` | `hasEmail=true`, `geoZone=kernradius` | newsletter, story |
-| `reactivation_hors_kernradius` | `hasEmail=true`, `geoZone=innerschweiz,reste_suisse` | newsletter |
-| `reactivation_etranger` | `hasEmail=true`, `geoZone=etranger` | newsletter |
-| `non_joignable_email` | `hasEmail=false` | — (voir bannière caveat) |
+| `reactivation_kernradius` | `source=iron_bike_history`, `hasEmail=true`, `geoZone=kernradius` | newsletter, story |
+| `reactivation_hors_kernradius` | `source=iron_bike_history`, `hasEmail=true`, `geoZone=innerschweiz,reste_suisse` | newsletter |
+| `reactivation_etranger` | `source=iron_bike_history`, `hasEmail=true`, `geoZone=etranger` | newsletter |
+| `non_joignable_email` | `source=iron_bike_history`, `hasEmail=false` | — (voir bannière caveat) |
 
 Bannière permanente sur ce gate : *"Statut d'inscription 2026 inconnu pour cette base — à
 exclure manuellement via l'export onreg avant tout envoi réel."* Le filtre
@@ -83,8 +83,24 @@ exclure manuellement via l'export onreg avant tout envoi réel."* Le filtre
 `IRONBIKE_BRIEF.md` §4.1bis) — tant qu'aucune liste d'inscrits n'est chargée, filtrer sur
 `registered` renvoie 0.
 
-Le segment "nouveaux prospects jamais inscrits" (ciblage géo + lookalike Meta) n'existe pas
-comme filtre : cette audience vit dans Meta Ads Manager, pas dans `participants.csv`.
+### Segments prédéfinis — prospects MTB (jamais couru l'Iron Bike)
+
+Le segment "nouveaux prospects jamais inscrits" documenté comme absent (ciblage géo + lookalike
+Meta, donnée vivant dans Meta Ads Manager) a été comblé par un vrai export myDS — voir
+`DATA_MODEL.md` "Deuxième source : prospects MTB". Même découpage géographique que la
+réactivation, mais sur la population `source=mtb_prospect` (~24 400 personnes, déjà nettoyées du
+consentement newsletter et dédupliquées contre `participants.csv`/`Angemeldete Teilnehmende Iron
+Bike.xlsx`) :
+
+| Segment | Filtres | Channels |
+|---|---|---|
+| `prospects_mtb_kernradius` | `source=mtb_prospect`, `geoZone=kernradius` | newsletter |
+| `prospects_mtb_hors_kernradius` | `source=mtb_prospect`, `geoZone=innerschweiz,reste_suisse` | newsletter |
+| `prospects_mtb_etranger` | `source=mtb_prospect`, `geoZone=etranger` | newsletter |
+
+Pas de `story` sur ces segments : ce ne sont pas des gens qui suivent déjà la marque Iron Bike.
+Le filtre `source` est disponible dans `SegmentBuilder` sur **toutes** les gates (pas seulement
+Gate 1) pour permettre de recibler les prospects MTB à d'autres phases de la campagne.
 
 ---
 
@@ -138,8 +154,8 @@ Réduit par rapport à Sparta (voir `IRONBIKE_BRIEF.md` §4.1ter) :
 
 1. **Nom**
 2. **Scope** — pills des segments prédéfinis du gate (absent si le gate n'en a pas, ex. Gate 2)
-3. **Filtres manuels** — les 7 champs réels (`gender`, `age_min`, `age_max`, `nationality`,
-   `geoZone`, `hasEmail`, `registrationStatus2026`)
+3. **Filtres manuels** — les 8 champs réels (`gender`, `age_min`, `age_max`, `nationality`,
+   `geoZone`, `hasEmail`, `registrationStatus2026`, `source`)
 4. **Objectif & contexte** — texte libre injecté dans le prompt
 5. **Compteur** — vrai compte via `POST /api/participants/count`, pas de mise à l'échelle
 

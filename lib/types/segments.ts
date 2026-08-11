@@ -6,6 +6,7 @@ export type FilterField =
   | 'geoZone'
   | 'hasEmail'
   | 'registrationStatus2026'
+  | 'source'
 
 export interface FilterCondition {
   id: string
@@ -32,6 +33,7 @@ export const FILTER_FIELD_LABELS: Record<FilterField, string> = {
   geoZone: 'Geo zone',
   hasEmail: 'Reachable by email',
   registrationStatus2026: '2026 registration status',
+  source: 'Source',
 }
 
 export const FILTER_VALUE_OPTIONS: Partial<Record<FilterField, { value: string; label: string }[]>> = {
@@ -64,6 +66,10 @@ export const FILTER_VALUE_OPTIONS: Partial<Record<FilterField, { value: string; 
     { value: 'registered', label: 'Registered' },
     { value: 'not_registered', label: 'Not registered' },
     { value: 'unknown', label: 'Unknown' },
+  ],
+  source: [
+    { value: 'iron_bike_history', label: 'Iron Bike (already raced)' },
+    { value: 'mtb_prospect', label: 'MTB prospect (never raced Iron Bike)' },
   ],
 }
 

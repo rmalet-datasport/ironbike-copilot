@@ -8,7 +8,11 @@ Einsiedeln, toutes éditions confondues. Voir `IRONBIKE_BRIEF.md` pour le contex
 
 ```
 data/participants.csv       → fichier brut, gitignoré, jamais lu côté client
-lib/db/participants.ts      → SERVEUR UNIQUEMENT : parsing/nettoyage, cache mémoire
+data/mtb_myds_users_export_*.xlsx → 2e source, gitignoré (prospects MTB, voir plus bas)
+lib/db/participants.ts      → SERVEUR UNIQUEMENT : parsing/nettoyage, cache mémoire, orchestration
+lib/db/prospects.ts         → SERVEUR UNIQUEMENT : parsing/nettoyage des prospects MTB
+lib/db/geo-zone.ts          → bucket NPA partagé (participants.ts + prospects.ts)
+lib/db/data-source.ts       → readLocalOrBlob partagé (participants.ts + prospects.ts)
 lib/db/segment-filter.ts    → SERVEUR UNIQUEMENT : filterParticipants()
 lib/db/segment-stats.ts     → SERVEUR UNIQUEMENT : computeStats() — agrégats structurés
 lib/types/participant.ts    → type Participant
@@ -86,10 +90,42 @@ pour l'instant directement dans `data/`, comme `participants.csv`.
 ### Fallback Vercel Blob (déploiement)
 
 `data/` est gitignoré : sur Vercel, ces fichiers n'existent pas dans le déploiement.
-`readLocalOrBlob()` dans `lib/db/participants.ts` lit `data/participants.csv` normalement en
-local, et bascule sur un store Vercel Blob privé (`participants.csv` / `registered-2026.xlsx`)
-quand le fichier local est absent. Voir `docs/DEPLOYMENT.md` pour la configuration complète et
-comment rafraîchir les données Blob après une mise à jour locale.
+`readLocalOrBlob()` (`lib/db/data-source.ts`, partagé avec `prospects.ts`) lit les fichiers
+normalement en local, et bascule sur un store Vercel Blob privé (`participants.csv` /
+`registered-2026.xlsx` / `mtb-prospects.xlsx`) quand le fichier local est absent. Voir
+`docs/DEPLOYMENT.md` pour la configuration complète et comment rafraîchir les données Blob après
+une mise à jour locale.
+
+---
+
+## Deuxième source : prospects MTB (`lib/db/prospects.ts`)
+
+`data/mtb_myds_users_export_2026_08_07_1616.xlsx` (gitignoré, même régime que `participants.csv`)
+— export myDS réel de tous les comptes ayant fait **au moins une course MTB Datasport (hors Iron
+Bike) ces 5 dernières années (2021+)**. Une ligne par user × édition (111 748 lignes → 57 837
+personnes uniques) : `myds_person_id, vorname, email, plz, sprache, edition, jahr,
+contest_distanz, nl_double_optin, nl_sportnews_abo, nl_abgemeldet_am`. Pas de nom de famille,
+âge, genre ni nationalité.
+
+C'est l'audience documentée comme absente de l'outil dans `IRONBIKE_BRIEF.md` §4.1ter
+("nouveaux prospects jamais inscrits… vit dans Meta Ads Manager, pas dans participants.csv") —
+comblée ici avec de vraies données, sous deux garde-fous appliqués **avant** qu'une personne
+n'entre dans le pool filtrable (jamais un filtrage a posteriori côté UI) :
+
+1. **Consentement newsletter réel** : conservé uniquement si `nl_sportnews_abo=1` (sur au moins
+   une ligne, regroupement par `myds_person_id`) et sans `nl_abgemeldet_am` renseigné.
+   `nl_double_optin` est un signal de qualité secondaire, jamais un filtre bloquant — instruction
+   explicite de l'équipe dev myDS.
+2. **Dédoublonnage contre `participants.csv` et `Angemeldete Teilnehmende Iron Bike.xlsx`** :
+   l'export MTB n'est pas limité aux gens n'ayant jamais fait l'Iron Bike. Matching par email
+   uniquement (pas de nom/naissance disponibles côté MTB) — plus conservateur que le matching à 4
+   paliers existant : un email partagé en famille exclut tout le foyer.
+
+Résultat final (~24 400 prospects mailables sur les 57 837 comptes) exposé avec
+`source: 'mtb_prospect'` et concaténé au pool `participants.csv` par `computeAll()` — un seul
+pool interrogeable, jamais deux API séparées. `geoZone` dérivée du NPA brut (pas de nationalité
+disponible) via `lib/db/geo-zone.ts` (partagé) : NPA à 4 chiffres → même bucket approximatif
+CH que `participants.csv` ; 5 chiffres ou format non exploitable → `etranger`/`unknown`.
 
 ---
 
@@ -97,6 +133,7 @@ comment rafraîchir les données Blob après une mise à jour locale.
 
 ```ts
 export type GeoZone = 'kernradius' | 'innerschweiz' | 'reste_suisse' | 'etranger' | 'unknown'
+export type ParticipantSource = 'iron_bike_history' | 'mtb_prospect'
 
 export type Participant = {
   id: string                  // hash stable (pas de Refnr fiable dans la source)
@@ -112,7 +149,10 @@ export type Participant = {
   town?: string
   geoZone: GeoZone
 
-  hasParticipatedBefore: true // vrai pour 100% du dataset
+  source: ParticipantSource   // 'iron_bike_history' (participants.csv) ou 'mtb_prospect' (prospects.ts)
+
+  hasParticipatedBefore: boolean // true uniquement pour source='iron_bike_history'
+  mtbHistory?: { editionCount: number; lastYear: number; lastRace: string } // source='mtb_prospect' uniquement
 
   registrationStatus2026: 'registered' | 'not_registered' | 'unknown'
   raceResult2026?: 'finisher' | 'dnf' | 'dns'  // rempli seulement après import post-course (P1)
@@ -140,7 +180,7 @@ est un segment prédéfini sélectionné comme scope dans le `SegmentBuilder`. S
 (pas de `gate0Segment`/`postLotterySegment` — ces champs n'existent pas pour Iron Bike), tous
 les segments, prédéfinis ou personnalisés, se réduisent à des `FilterCondition[]`.
 
-**Champs filtrables (7 champs, `lib/types/segments.ts`)** :
+**Champs filtrables (8 champs, `lib/types/segments.ts`)** :
 
 | FilterField | Type | Description |
 |---|---|---|
@@ -150,9 +190,18 @@ les segments, prédéfinis ou personnalisés, se réduisent à des `FilterCondit
 | `geoZone` | select | valeur unique ou liste séparée par virgule (OR), ex. `innerschweiz,reste_suisse` |
 | `hasEmail` | boolean | 'true' \| 'false' |
 | `registrationStatus2026` | select | 'registered' \| 'not_registered' \| 'unknown' |
+| `source` | select | 'iron_bike_history' \| 'mtb_prospect' — distingue les deux sources fusionnées dans le pool |
 
 Pas de champs `total_editions_*`, `engagement_min`, `city_contains`, `distance`,
 `hasInsurance` : aucune donnée réelle ne les alimente (voir `IRONBIKE_BRIEF.md` §2.1/§4.1ter).
+
+⚠️ **Tous les segments prédéfinis historiques épinglent `source: 'iron_bike_history'`** — sans
+ce filtre, un segment comme `toute_la_base` (filters: `[]`) ou `reactivation_kernradius`
+(`hasEmail=true, geoZone=kernradius`) avalerait silencieusement les prospects MTB (eux aussi
+`hasEmail=true` et potentiellement `geoZone=kernradius`), faussant les comptes réels et mélangeant
+deux publics avec un message qui suppose "tu as déjà couru l'Iron Bike". Un segment personnalisé
+créé sans filtre `source` explicite mélange volontairement les deux populations — c'est voulu
+pour permettre de cibler les prospects MTB sur n'importe quelle gate, pas seulement Gate 1.
 
 ---
 

@@ -11,7 +11,7 @@ import type { PredefinedSegment } from '@/lib/segments/predefined';
 import { exportSegmentList, slugifyForFilename } from '@/lib/utils/exportSegment';
 
 const ALL_FIELDS: FilterField[] = [
-  'gender', 'age_min', 'age_max', 'nationality', 'geoZone', 'hasEmail', 'registrationStatus2026',
+  'gender', 'age_min', 'age_max', 'nationality', 'geoZone', 'hasEmail', 'registrationStatus2026', 'source',
 ];
 
 interface SegmentBuilderProps {

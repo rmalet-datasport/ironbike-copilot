@@ -16,17 +16,19 @@
 
 ## Le problème que Vercel Blob résout
 
-`data/participants.csv` et `data/Angemeldete Teilnehmende Iron Bike.xlsx` sont **gitignorés**
-(vraies données personnelles, jamais commitées — voir `CLAUDE.md` §Données). En local, chaque
-collègue garde sa copie dans `data/`. Sur Vercel, ces fichiers n'existent pas dans le
-déploiement puisqu'ils ne sont pas dans le repo.
+`data/participants.csv`, `data/Angemeldete Teilnehmende Iron Bike.xlsx` et
+`data/mtb_myds_users_export_2026_08_07_1616.xlsx` sont **gitignorés** (vraies données
+personnelles, jamais commitées — voir `CLAUDE.md` §Données). En local, chaque collègue garde sa
+copie dans `data/`. Sur Vercel, ces fichiers n'existent pas dans le déploiement puisqu'ils ne
+sont pas dans le repo.
 
-`lib/db/participants.ts` (`readLocalOrBlob`) gère les deux cas :
+`readLocalOrBlob()` (`lib/db/data-source.ts`, partagé par `participants.ts` et `prospects.ts`)
+gère les deux cas :
 1. **Local** : si le fichier existe dans `data/`, il est lu directement (comportement inchangé).
 2. **Prod (Vercel)** : si le fichier local est absent, le code lit le même contenu depuis un
    store **Vercel Blob privé** (`ironbike-participants`), via `BLOB_READ_WRITE_TOKEN`.
 
-Les deux fichiers ont été uploadés une fois manuellement (voir commandes ci-dessous). **Il n'y
+Les trois fichiers ont été uploadés une fois manuellement (voir commandes ci-dessous). **Il n'y
 a pas de synchro automatique** entre `data/` en local et le store Blob — si les données locales
 changent, il faut re-uploader.
 
@@ -66,8 +68,8 @@ npx vercel env ls
 
 ## Mettre à jour les données Blob
 
-Quand `data/participants.csv` ou la liste des inscrits 2026 change et que le déploiement doit
-refléter la nouvelle version :
+Quand `data/participants.csv`, la liste des inscrits 2026 ou l'export prospects MTB change et
+que le déploiement doit refléter la nouvelle version :
 
 ```powershell
 $token = (Get-Content .env.local | Where-Object { $_ -match '^BLOB_READ_WRITE_TOKEN=' }) -replace '^BLOB_READ_WRITE_TOKEN=', ''
@@ -78,6 +80,9 @@ npx vercel blob put data/participants.csv --pathname participants.csv --access p
 
 # Idem pour la liste des inscrits 2026
 npx vercel blob put "data/Angemeldete Teilnehmende Iron Bike.xlsx" --pathname registered-2026.xlsx --access private --rw-token $token --allow-overwrite true
+
+# Idem pour l'export prospects MTB (nom de fichier local exact attendu par lib/db/prospects.ts)
+npx vercel blob put "data/mtb_myds_users_export_2026_08_07_1616.xlsx" --pathname mtb-prospects.xlsx --access private --rw-token $token --allow-overwrite true
 ```
 
 Pas besoin de redéployer après un upload Blob — le code lit le store à chaque requête (pas de

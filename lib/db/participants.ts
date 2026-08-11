@@ -4,48 +4,19 @@
 // Seuls les agrégats calculés par ce module (comptes, stats) doivent être exposés au client,
 // via les routes app/api/participants/*.
 
-import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import ExcelJS from 'exceljs';
-import { get } from '@vercel/blob';
 import type { Participant, GeoZone } from '@/lib/types/participant';
+import { bucketByZip } from './geo-zone';
+import { readLocalOrBlob } from './data-source';
+import { loadProspects } from './prospects';
 
 const DATA_PATH = path.join(process.cwd(), 'data', 'participants.csv');
 
 // Nom de fichier attendu pour la liste des inscrits 2026 — chaque collègue place sa copie
 // (même nom exact) dans son data/ local. Voir IRONBIKE_BRIEF.md §4.1bis.
 const REGISTERED_PATH = path.join(process.cwd(), 'data', 'Angemeldete Teilnehmende Iron Bike.xlsx');
-
-// Fallback prod (Vercel) : en local, chaque collègue garde sa copie dans data/ (jamais commitée,
-// voir CLAUDE.md §Données). En prod, ces fichiers n'existent pas dans le déploiement — ils sont
-// lus depuis un store Vercel Blob privé à la place. BLOB_READ_WRITE_TOKEN est fourni
-// automatiquement par Vercel une fois le store lié au projet ; en local, le fichier existe déjà
-// donc ce chemin n'est jamais pris.
-async function readLocalOrBlob(localPath: string, blobPathname: string): Promise<Buffer | null> {
-  if (fs.existsSync(localPath)) {
-    return fs.readFileSync(localPath);
-  }
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
-  try {
-    const result = await get(blobPathname, { access: 'private' });
-    if (!result || result.statusCode !== 200) return null;
-    const reader = result.stream.getReader();
-    const chunks: Uint8Array[] = [];
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      chunks.push(chunk.value);
-    }
-    return Buffer.concat(chunks);
-  } catch (err) {
-    console.error(`[participants] Blob fallback failed for ${blobPathname}`, err);
-    return null;
-  }
-}
-
-// Bucket approximatif par préfixe NPA — voir IRONBIKE_BRIEF.md §2.2. Ce n'est pas une distance
-// calculée : ne pas s'appuyer sur ce bucket comme fiable au NPA près (P1 : géocodage précis).
-const KERNRADIUS_PREFIXES = new Set(['64', '88', '87', '86', '63', '80', '81']);
-const INNERSCHWEIZ_PREFIXES = new Set(['60']);
 
 function detectDelimiter(headerLine: string): string {
   const commas = headerLine.split(',').length;
@@ -93,10 +64,7 @@ function parseBirthDate(raw: string): { iso?: string; age?: number } {
 function deriveGeoZone(nationality: string, zip?: string): GeoZone {
   if (nationality !== 'SUI') return 'etranger';
   if (!zip || zip.length < 2) return 'unknown';
-  const prefix = zip.slice(0, 2);
-  if (KERNRADIUS_PREFIXES.has(prefix)) return 'kernradius';
-  if (INNERSCHWEIZ_PREFIXES.has(prefix)) return 'innerschweiz';
-  return 'reste_suisse';
+  return bucketByZip(zip);
 }
 
 // Heuristique approximative pour exclure le bruit de saisie évident (~28 lignes attendues sur
@@ -138,17 +106,24 @@ function loadAll(): Promise<LoadResult> {
 }
 
 // Charge participants.csv, puis fusionne avec la liste des inscrits 2026 si le fichier
-// REGISTERED_PATH existe localement (voir mergeRegistrationStatus + findPrimoInscrits). Mis
-// en cache une seule fois par process — redémarrer le serveur de dev après avoir mis à jour
-// l'un des deux fichiers.
+// REGISTERED_PATH existe localement (voir mergeRegistrationStatus + findPrimoInscrits), puis
+// ajoute les prospects MTB (lib/db/prospects.ts) — une source distincte (jamais couru l'Iron
+// Bike), déjà nettoyée de tout doublon avec participants.csv/la liste des inscrits avant d'être
+// concaténée ici (voir prospects.ts). Mis en cache une seule fois par process — redémarrer le
+// serveur de dev après avoir mis à jour l'un des trois fichiers.
 async function computeAll(): Promise<LoadResult> {
   const base = await parseParticipantsCsv();
   const registeredBuffer = await readLocalOrBlob(REGISTERED_PATH, 'registered-2026.xlsx');
-  if (!registeredBuffer) return { participants: base, primoInscrits: EMPTY_PRIMO_STATS };
-  const registeredList = await loadRegisteredList(registeredBuffer);
-  const participants = mergeRegistrationStatus(base, registeredList);
-  const primoInscrits = findPrimoInscrits(base, registeredList);
-  return { participants, primoInscrits };
+  const registeredList = registeredBuffer ? await loadRegisteredList(registeredBuffer) : [];
+  const historic = registeredBuffer ? mergeRegistrationStatus(base, registeredList) : base;
+  const primoInscrits = registeredBuffer ? findPrimoInscrits(base, registeredList) : EMPTY_PRIMO_STATS;
+
+  const knownEmails = new Set<string>();
+  for (const p of base) if (p.email) knownEmails.add(p.email);
+  for (const r of registeredList) if (r.email) knownEmails.add(r.email);
+  const prospects = await loadProspects(knownEmails, !!registeredBuffer);
+
+  return { participants: [...historic, ...prospects], primoInscrits };
 }
 
 export function getParticipants(): Promise<Participant[]> {
@@ -231,6 +206,7 @@ async function parseParticipantsCsv(): Promise<Participant[]> {
       zip,
       town,
       geoZone: deriveGeoZone(nationality, zip),
+      source: 'iron_bike_history',
       hasParticipatedBefore: true,
       registrationStatus2026: 'unknown',
     });

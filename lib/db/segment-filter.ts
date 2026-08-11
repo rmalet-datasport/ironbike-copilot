@@ -22,6 +22,8 @@ function matchesAllFilters(p: Participant, filters: FilterCondition[]): boolean 
         return p.hasEmail === (v === 'true')
       case 'registrationStatus2026':
         return p.registrationStatus2026 === v
+      case 'source':
+        return p.source === v
       default:
         return true
     }

@@ -352,11 +352,18 @@ Sparta n'apportent rien ici et risquent même de nuire à la crédibilité de l'
 (les champs réels, dont `registrationStatus2026`) → Objectif/contexte libre → Compteur. Plus
 simple, plus honnête sur ce que l'outil sait vraiment, et moins de code à livrer pour demain.
 
-Le segment "nouveaux prospects jamais inscrits" (ciblage géo + lookalike Meta, chapitre 4 étapes
-1–3 du concept) **n'existe pas comme filtre dans l'outil** : cette audience n'est présente dans
-aucune donnée disponible ici (elle vit dans Meta Ads Manager via Custom Audience/Lookalike, pas
-dans `History.csv`). Le brief ne doit pas fabriquer ce segment — juste documenter dans l'UI que
-ce levier est piloté hors-outil.
+**Mise à jour (11.8.2026)** : le segment "nouveaux prospects jamais inscrits" (ciblage géo,
+chapitre 4 étapes 1–3 du concept) — documenté ci-dessus comme absent car vivant uniquement dans
+Meta Ads Manager (Custom Audience/Lookalike) — a depuis été comblé par un vrai export myDS
+(`data/mtb_myds_users_export_2026_08_07_1616.xlsx`, ~57 837 comptes ayant fait au moins une
+course MTB Datasport hors Iron Bike ces 5 ans). Voir `docs/DATA_MODEL.md` "Deuxième source :
+prospects MTB" pour le détail complet : consentement newsletter réel, dédoublonnage contre
+`participants.csv`/la liste des inscrits 2026, ~24 400 prospects mailables au final, exposés via
+`source='mtb_prospect'` et les segments `prospects_mtb_kernradius/hors_kernradius/etranger` sur
+Gate 1 (voir `GATES.md`). Limite documentée : matching de dédoublonnage par email uniquement
+(l'export MTB n'a ni nom de famille ni date de naissance), et heuristique NPA approximative pour
+`geoZone` en l'absence de nationalité dans cette source — les deux mêmes limites déjà acceptées
+ailleurs dans ce brief pour `participants.csv`.
 
 **Race Week (Gate 2)** — Newsletter 5 s'adresse "aux inscrits" (`an Angemeldete`), une donnée
 qu'on n'a pas non plus. Deux options réalistes, à trancher avec ton équipe :
