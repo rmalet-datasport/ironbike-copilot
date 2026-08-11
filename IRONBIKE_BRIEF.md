@@ -500,6 +500,12 @@ runner self-hosted du repo Sparta (`.github/workflows/deploy.yml`, `docker-compo
 n'est **pas utilisé pour l'instant** — à garder en tête comme option **P1** si l'équipe veut
 plus tard un outil hébergé partagé plutôt qu'une instance par personne.
 
+**Mise à jour (11.8.2026)** : le déploiement s'est finalement fait sur Vercel (voir
+`docs/DEPLOYMENT.md`), pas sur `lab.datasport.com`. Les deux fichiers du pipeline self-hosted ont
+été supprimés (le workflow échouait sur chaque push, `GHCR_TOKEN` jamais configuré) — l'option P1
+ci-dessus reste valable si besoin un jour, mais nécessiterait de recréer un workflow de
+déploiement dédié.
+
 Ce que ça implique concrètement, à documenter clairement pour les collègues (pas juste pour
 Claude Code) :
 

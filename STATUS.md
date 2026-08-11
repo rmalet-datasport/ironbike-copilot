@@ -57,11 +57,12 @@ Vercel Blob (voir `docs/DEPLOYMENT.md`) — utile pour le déploiement, pas pour
 Le preview Vercel fonctionne de bout en bout (auth, comptage, export, génération IA réelle,
 toutes testées). Reste à décider : promouvoir en prod (`vercel deploy --prod`) quand prêt.
 
-### 🟡 Infra self-hosted obsolète (`.github/workflows/deploy.yml`, `docker-compose.prod.yml`)
-Ces fichiers déploient vers un serveur self-hosted (`lab.datasport.com` via SSH/Docker) — c'est
-l'ancien plan. Le déploiement réel se fait maintenant sur Vercel (voir `docs/DEPLOYMENT.md`).
-Ces 2 fichiers ne sont plus utilisés ; à supprimer ou à adapter si le projet en a encore besoin
-un jour (ex. instance interne permanente en plus de Vercel).
+### ✅ Infra self-hosted obsolète — supprimée (11.8.2026)
+`.github/workflows/deploy.yml` et `docker-compose.prod.yml` déployaient vers un serveur
+self-hosted (`lab.datasport.com` via SSH/Docker) — l'ancien plan, avant le passage à Vercel. Le
+workflow échouait sur chaque push (`GHCR_TOKEN` jamais configuré, plus personne ne s'en servait).
+Les deux fichiers ont été supprimés ; le `Dockerfile` reste au cas où une instance self-hosted
+redevienne utile un jour (il faudrait alors recréer un workflow de déploiement dédié).
 
 ### 🟡 Rafraîchir les données Blob après mise à jour locale
 `data/participants.csv` et la liste des inscrits 2026 sont uploadés une fois sur Vercel Blob

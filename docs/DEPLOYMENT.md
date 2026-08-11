@@ -8,9 +8,10 @@
   ci-dessus — chaque push sur `main` déclenche un déploiement.
 - **État actuel** : preview fonctionnel de bout en bout (auth, comptage, export, génération IA
   réelle). Pas encore promu en production (`vercel deploy --prod`).
-- `.github/workflows/deploy.yml` et `docker-compose.prod.yml` correspondent à un **ancien plan**
-  (self-hosted sur `lab.datasport.com`) — obsolètes depuis le passage à Vercel, voir
-  `STATUS.md`.
+- L'ancien plan self-hosted (`lab.datasport.com`) est abandonné : `.github/workflows/deploy.yml`
+  et `docker-compose.prod.yml` ont été supprimés le 11.8.2026 (le workflow échouait sur chaque
+  push, `GHCR_TOKEN` jamais configuré et plus personne ne s'en servait) — voir `STATUS.md`. Le
+  `Dockerfile` reste au cas où.
 
 ---
 
