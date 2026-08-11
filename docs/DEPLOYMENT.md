@@ -96,11 +96,37 @@ redémarrage (nouveau déploiement, ou cold start Vercel) suffit à voir la nouv
 
 ```powershell
 npx vercel deploy          # preview — nouvelle URL à chaque fois
-npx vercel deploy --prod   # production — même URL stable
+npx vercel deploy --prod   # environnement Production — mais PAS une URL stable, voir ci-dessous
 ```
 
 Un push sur `main` sur GitHub déclenche aussi un déploiement automatiquement (intégration
-GitHub liée au projet Vercel).
+GitHub liée au projet Vercel) — vérifié le 11.8.2026 : ce déploiement se fait bien dans
+l'environnement **Production** (`npx vercel ls` le confirme), pas juste preview.
+
+### ⚠️ Pas de domaine stable — chaque déploiement a sa propre URL à usage unique
+
+Piège vécu le 11.8.2026 : un collègue a testé sur une ancienne URL de déploiement (vieille de
+5 jours) et n'y a pas vu les derniers changements, alors que le déploiement le plus récent les
+avait bien. `npx vercel domains ls` confirme **0 domaine configuré** sur le projet — chaque
+déploiement (preview ou Production) obtient une URL avec un hash aléatoire
+(`ironbike-copilot-<hash>-datasport.vercel.app`), et rien ne pointe automatiquement vers "le
+dernier déploiement".
+
+**Solution actuelle (bricolage manuel, pas automatique)** : un alias a été créé une fois vers le
+déploiement du 11.8.2026 :
+
+```powershell
+npx vercel alias set <nouveau-déploiement>.vercel.app ironbike-copilot-datasport.vercel.app
+```
+
+⚠️ Cet alias **ne se met pas à jour tout seul** au prochain déploiement — il faut relancer cette
+commande (avec la nouvelle URL trouvée via `npx vercel ls`) à chaque fois qu'on veut que
+`ironbike-copilot-datasport.vercel.app` reflète le dernier code. Sans ça, ce lien reste figé sur
+l'ancien déploiement, exactement comme le piège vécu ci-dessus.
+
+**Vraie solution, pas encore faite** : configurer un domaine persistant (dashboard Vercel →
+Project Settings → Domains) qui suive automatiquement chaque déploiement Production, sans
+manipulation manuelle après coup. Reste à décider/faire — voir `STATUS.md`.
 
 **Après tout changement de variable d'environnement** : il faut redéployer pour que la nouvelle
 valeur soit prise en compte — les fonctions serverless d'un déploiement existant gardent les

@@ -53,9 +53,16 @@ Vercel Blob (voir `docs/DEPLOYMENT.md`) — utile pour le déploiement, pas pour
 
 ## Ce qui reste à faire / décider
 
-### 🟡 Déploiement — encore en preview, pas en production
-Le preview Vercel fonctionne de bout en bout (auth, comptage, export, génération IA réelle,
-toutes testées). Reste à décider : promouvoir en prod (`vercel deploy --prod`) quand prêt.
+### 🟡 Pas de domaine stable — chaque déploiement a sa propre URL (bug vécu le 11.8.2026)
+Un push sur `main` déploie bien dans l'environnement **Production** Vercel (vérifié le 11.8.2026,
+contrairement à ce qu'on pensait avant), mais **sans domaine persistant configuré**
+(`vercel domains ls` → 0 domaine). Chaque déploiement a une URL à hash aléatoire différente ;
+rien ne pointe automatiquement vers "le dernier déploiement". Un collègue a testé sur une URL de
+5 jours et n'a pas vu les derniers changements. Solution actuelle : un alias manuel
+(`ironbike-copilot-datasport.vercel.app`) a été pointé une fois vers le dernier déploiement — À
+RE-POINTER MANUELLEMENT après chaque futur déploiement (voir `docs/DEPLOYMENT.md`, commande
+`vercel alias set`). Reste à décider : configurer un vrai domaine persistant côté dashboard
+Vercel pour ne plus avoir à y penser.
 
 ### ✅ Infra self-hosted obsolète — supprimée (11.8.2026)
 `.github/workflows/deploy.yml` et `docker-compose.prod.yml` déployaient vers un serveur
