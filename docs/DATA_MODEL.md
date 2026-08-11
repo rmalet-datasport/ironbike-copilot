@@ -62,7 +62,9 @@ l'auth `demo_access`.
   pour ne pas fusionner des membres d'une même famille partageant un email).
 - **Champs manquants jamais inventés** : `gender` vide → `'unknown'`, `birthDate`/`age`
   absents → `undefined`, jamais estimés.
-- **`geoZone`** : bucket approximatif par préfixe NPA (voir `IRONBIKE_BRIEF.md` §2.2) — pas
+- **`geoZone`** : bucket approximatif par préfixe NPA (voir `IRONBIKE_BRIEF.md` §2.2), complété
+  par une courte liste de NPA précis pour une zone (Affoltern am Albis, préfixe `89xx`) qu'aucun
+  préfixe large ne couvre — voir `EXTRA_KERNRADIUS_CODES` dans `lib/db/geo-zone.ts`. Toujours pas
   une distance calculée. P1 : géocodage précis.
 
 `getParticipants()` fusionne automatiquement avec la liste des inscrits 2026 dès que

@@ -193,6 +193,20 @@ confirme l'hypothèse du concept de campagne (le cœur de la base est bien dans 
 Documenter clairement dans le code que ce bucket est une approximation par préfixe, pas une
 vraie distance calculée — pour que personne ne s'appuie dessus comme si c'était fiable au NPA près.
 
+**Mise à jour (11.8.2026)** : les 7 préfixes ci-dessus ont été confirmés contre l'isochrone
+"45 min en voiture depuis Einsiedeln" (Google Maps/Gemini). Un sous-ensemble du canton de Zurich
+(Affoltern am Albis / Knonaueramt, préfixe `89xx`) tombe dans ce rayon de 45 min mais n'est
+couvert par aucun des 7 préfixes existants — plutôt que d'ajouter tout le préfixe `89xx` (trop
+large, dépasserait le rayon réel), une liste explicite de 23 NPA précis a été ajoutée comme
+exception dans `lib/db/geo-zone.ts` (`EXTRA_KERNRADIUS_CODES` : 8902–8919, 8925, 8926, 8932–8934,
+8942). Si quelqu'un demande à ajuster à nouveau le rayon kernradius (ajouter/retirer une zone) :
+même méthode — vérifier d'abord si la zone concernée est déjà couverte par un des 7 préfixes
+larges, sinon ajouter les NPA précis un par un dans `EXTRA_KERNRADIUS_CODES`, jamais élargir un
+préfixe entier sans revérifier tout ce qu'il engloberait (ex. `80xx`/`81xx` = tout Zurich-ville,
+`89xx` en entier irait bien au-delà de 45 min). Toujours revalider avec
+`node scripts/validate-participants.mjs` et `node scripts/validate-prospects.mjs` (comptes
+avant/après) avant de déployer un changement de zone.
+
 ---
 
 ## 3. `lib/constants.ts` — remplacer `EVENT`, `SEGMENT_SIZES`, `RACES`
